@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                    String         @id @default(uuid())
+  name                  String
+  whatsappPhoneNumberId String         @unique
+  whatsappAccessToken   String         @db.Text
+  webhookVerifyToken    String
+  isActive              Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  users                 User[]
+  conversations         Conversation[]
+  messages              Message[]
+  auditLogs             AuditLog[]
+  quickReplies          QuickReply[]
+
+  @@map("companies")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  companyId    String
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(AGENT)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company      Company       @relation(fields: [companyId], references: [id])
+  assignments  Assignment[]
+  sentMessages Message[]     @relation("SentMessages")
+  auditLogs    AuditLog[]
+
+  @@index([companyId, email])
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+model Conversation {
+  id            String             @id @default(uuid())
+  companyId     String
+  customerPhone String
+  customerName  String?
+  status        ConversationStatus @default(OPEN)
+  lastMessageAt DateTime           @default(now())
+  unreadCount   Int                @default(0)
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id])
+  messages    Message[]
+  assignments Assignment[]
+
+  @@unique([companyId, customerPhone])
+  @@index([companyId, status, lastMessageAt])
+  @@map("conversations")
+}
+
+enum ConversationStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  ARCHIVED
+}
+
+model Assignment {
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  assignedAt     DateTime     @default(now())
+  unassignedAt   DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@index([conversationId, userId])
+  @@map("assignments")
+}
+
+model Message {
+  id                String        @id @default(uuid())
+  companyId         String
+  conversationId    String
+  whatsappMessageId String?       @unique
+  direction         Direction
+  type              MessageType   @default(TEXT)
+  content           String        @db.Text
+  mediaUrl          String?
+  status            MessageStatus @default(PENDING)
+  sentById          String?
+  sentAt            DateTime      @default(now())
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  metadata          Json?
+
+  company      Company      @relation(fields: [companyId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sentBy       User?        @relation("SentMessages", fields: [sentById], references: [id])
+
+  @@index([conversationId, sentAt])
+  @@index([companyId, sentAt])
+  @@map("messages")
+}
+
+enum Direction {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+  AUDIO
+  VIDEO
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model QuickReply {
+  id        String   @id @default(uuid())
+  companyId String
+  title     String
+  content   String   @db.Text
+  shortcut  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("quick_replies")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  timestamp DateTime @default(now())
+  ipAddress String?
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User?   @relation(fields: [userId], references: [id])
+
+  @@index([companyId, timestamp])
+  @@index([userId, timestamp])
+  @@map("audit_logs")
+}

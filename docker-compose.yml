@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: wpp-postgres
+    environment:
+      POSTGRES_DB: whatsapp_db
+      POSTGRES_USER: whatsapp
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - wpp-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: wpp-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - wpp-network
+
+  waha:
+    image: devlikeapro/waha
+    container_name: wpp-waha
+    ports:
+      - "3001:3000"
+    environment:
+      - WAHA_DASHBOARD_USERNAME=admin
+      - WAHA_DASHBOARD_PASSWORD=admin123
+      - WAHA_API_KEY=wpp_waha_dev_key_2024
+      - WHATSAPP_HOOK_URL=http://host.docker.internal:4000/webhooks/waha
+      - WHATSAPP_HOOK_EVENTS=message,message.any,message.ack
+      - WHATSAPP_START_SESSION=default
+    volumes:
+      - waha_sessions:/app/.sessions
+    networks:
+      - wpp-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  waha_sessions:
+
+networks:
+  wpp-network:
+    driver: bridge
