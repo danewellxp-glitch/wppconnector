@@ -4,6 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { join } from 'path';
+import * as fs from 'fs';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class MessagesService {
@@ -382,6 +385,13 @@ export class MessagesService {
       include: { sentBy: { select: { id: true, name: true } } },
     });
 
+    const uniqueFilename = `${randomUUID()}.${ext || 'bin'}`;
+    const uploadsDir = join(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.writeFileSync(join(uploadsDir, uniqueFilename), fileBuffer);
+    const backendUrl = process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+    const mediaUrl = `${backendUrl}/uploads/${uniqueFilename}`;
+
     const base64Data = fileBuffer.toString('base64');
     const meta = conversation.metadata as any;
     const sendTo = meta?.chatId || conversation.customerPhone;
@@ -403,6 +413,7 @@ export class MessagesService {
         data: {
           ...(waMessageId && { whatsappMessageId: waMessageId }),
           status: 'SENT',
+          mediaUrl,
         },
         include: { sentBy: { select: { id: true, name: true } } },
       });
