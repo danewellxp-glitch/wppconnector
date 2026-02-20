@@ -418,12 +418,15 @@ export class DepartmentRoutingService {
         messages[reason],
       );
     } else {
-      // todos offline — setar TIMEOUT_REDIRECT para o cron NÃO reprocessar (evita loop)
+      // todos offline — voltar para GREETING para o cliente poder tentar novamente
       await this.prisma.conversation.update({
         where: { id: conversationId },
         data: {
-          flowState: 'TIMEOUT_REDIRECT',
+          flowState: 'GREETING',
+          departmentId: null,
+          assignedUserId: null,
           timeoutAt: null,
+          status: 'OPEN',
         },
       });
       await this.sendWhatsAppToConversation(
