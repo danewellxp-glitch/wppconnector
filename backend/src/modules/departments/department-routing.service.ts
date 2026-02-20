@@ -216,6 +216,27 @@ export class DepartmentRoutingService {
   }
 
   async checkTimeoutAndRedirect() {
+    // Fix orphaned conversations: ASSIGNED state but no agent assigned
+    const orphaned = await this.prisma.conversation.findMany({
+      where: {
+        flowState: 'ASSIGNED',
+        assignedUserId: null,
+        status: { in: ['OPEN', 'ASSIGNED'] },
+      },
+    });
+    for (const conv of orphaned) {
+      this.logger.log(
+        `[ROUTING] Conversa ${conv.id} ASSIGNED sem agente. Tentando reatribuir...`,
+      );
+      await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: { flowState: 'DEPARTMENT_SELECTED', status: 'OPEN' },
+      });
+      if (conv.departmentId) {
+        await this.assignToAgent(conv.id, conv.departmentId);
+      }
+    }
+
     const timedOut = await this.prisma.conversation.findMany({
       where: {
         flowState: 'DEPARTMENT_SELECTED',
@@ -397,7 +418,14 @@ export class DepartmentRoutingService {
         messages[reason],
       );
     } else {
-      // todos offline — flowState permanece DEPARTMENT_SELECTED, assignedUserId=null
+      // todos offline — setar TIMEOUT_REDIRECT para o cron NÃO reprocessar (evita loop)
+      await this.prisma.conversation.update({
+        where: { id: conversationId },
+        data: {
+          flowState: 'TIMEOUT_REDIRECT',
+          timeoutAt: null,
+        },
+      });
       await this.sendWhatsAppToConversation(
         conversationId,
         messages['all_offline'],

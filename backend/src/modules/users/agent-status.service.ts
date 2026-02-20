@@ -58,16 +58,47 @@ export class AgentStatusService {
   async checkAndMarkOffline() {
     const timeoutSeconds = 120; // 2 minutes
     const cutoff = new Date(Date.now() - timeoutSeconds * 1000);
-    const offline = await this.prisma.user.updateMany({
+
+    // Find agents that will be marked offline before updating
+    const agentsToOffline = await this.prisma.user.findMany({
       where: {
         role: 'AGENT',
         onlineStatus: { in: ['ONLINE', 'BUSY'] },
         lastHeartbeatAt: { lt: cutoff },
       },
+      select: { id: true },
+    });
+
+    if (agentsToOffline.length === 0) return;
+
+    await this.prisma.user.updateMany({
+      where: { id: { in: agentsToOffline.map((a) => a.id) } },
       data: { onlineStatus: 'OFFLINE' },
     });
-    if (offline.count > 0) {
-      this.logger.log(`Marked ${offline.count} agents as OFFLINE (heartbeat timeout)`);
+
+    this.logger.log(
+      `Marked ${agentsToOffline.length} agents as OFFLINE (heartbeat timeout)`,
+    );
+
+    // Release conversations assigned to agents that just went offline
+    for (const agent of agentsToOffline) {
+      const released = await this.prisma.conversation.updateMany({
+        where: {
+          assignedUserId: agent.id,
+          status: { in: ['OPEN', 'ASSIGNED'] },
+          flowState: { in: ['ASSIGNED', 'DEPARTMENT_SELECTED'] },
+        },
+        data: {
+          assignedUserId: null,
+          flowState: 'DEPARTMENT_SELECTED',
+          status: 'OPEN',
+        },
+      });
+      if (released.count > 0) {
+        this.logger.log(
+          `Released ${released.count} conversation(s) from offline agent ${agent.id}`,
+        );
+      }
     }
   }
 }
