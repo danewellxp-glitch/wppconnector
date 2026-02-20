@@ -19,7 +19,26 @@ export class ConversationsService {
   ) {
     const where: any = { companyId, ...(status && { status }) };
     if (user && user.role !== 'ADMIN' && user.departmentId) {
-      where.departmentId = user.departmentId;
+      // Find the root department for this company
+      const rootDept = await this.prisma.department.findFirst({
+        where: { companyId, isRoot: true },
+      });
+
+      if (rootDept) {
+        // Agent can see: 
+        // 1) Conversations in their own department
+        // 2) Conversations in the Root department that are unassigned (Offline Queue)
+        where.OR = [
+          { departmentId: user.departmentId },
+          {
+            departmentId: rootDept.id,
+            assignedUserId: null,
+            status: 'OPEN' // Only pending offline queue
+          }
+        ];
+      } else {
+        where.departmentId = user.departmentId;
+      }
     }
     return this.prisma.conversation.findMany({
       where,
@@ -142,6 +161,7 @@ export class ConversationsService {
         assignedUserId: userId,
         assignedAt: new Date(),
         flowState: 'ASSIGNED',
+        timeoutAt: null,
       },
       include: {
         assignedUser: { select: { id: true, name: true, email: true } },
@@ -199,6 +219,7 @@ export class ConversationsService {
         updateData.assignedUserId = userId;
         updateData.assignedAt = new Date();
         updateData.flowState = 'ASSIGNED';
+        updateData.timeoutAt = null;
       }
     }
     return this.prisma.conversation.update({

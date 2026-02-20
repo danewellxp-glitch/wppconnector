@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 
 interface MessageInputProps {
   conversationId: string;
+  droppedFile?: File | null;
+  onClearDroppedFile?: () => void;
 }
 
 const ALLOWED_TYPES = [
@@ -31,11 +33,10 @@ const ALLOWED_TYPES = [
 ];
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
-export function MessageInput({ conversationId }: MessageInputProps) {
+export function MessageInput({ conversationId, droppedFile, onClearDroppedFile }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendMessage = useSendMessage();
@@ -49,6 +50,31 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     textareaRef.current?.focus();
   }, [conversationId]);
 
+  useEffect(() => {
+    if (droppedFile) {
+      const ext = droppedFile.name.split('.').pop()?.toLowerCase();
+      const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+
+      if (!ALLOWED_TYPES.includes(droppedFile.type) && !VALID_EXTS.includes(ext || '')) {
+        toast.error('Tipo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
+        onClearDroppedFile?.();
+        return;
+      }
+      if (droppedFile.size > MAX_SIZE) {
+        toast.error('Arquivo muito grande. Limite: 10 MB.');
+        onClearDroppedFile?.();
+        return;
+      }
+      setSelectedFile(droppedFile);
+      if (droppedFile.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
+        setFilePreview(URL.createObjectURL(droppedFile));
+      } else {
+        setFilePreview(null);
+      }
+      onClearDroppedFile?.();
+    }
+  }, [droppedFile, onClearDroppedFile]);
+
   // Revoke object URL on cleanup
   useEffect(() => {
     return () => {
@@ -60,7 +86,10 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+
+    if (!ALLOWED_TYPES.includes(file.type) && !VALID_EXTS.includes(ext || '')) {
       toast.error('Tipo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
       return;
     }
@@ -70,7 +99,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }
 
     setSelectedFile(file);
-    if (file.type.startsWith('image/')) {
+    if (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
       setFilePreview(URL.createObjectURL(file));
     } else {
       setFilePreview(null);
@@ -138,53 +167,8 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }
   }, [content]);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        toast.error('Tipo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
-        return;
-      }
-      if (file.size > MAX_SIZE) {
-        toast.error('Arquivo muito grande. Limite: 10 MB.');
-        return;
-      }
-      setSelectedFile(file);
-      if (file.type.startsWith('image/')) {
-        setFilePreview(URL.createObjectURL(file));
-      } else {
-        setFilePreview(null);
-      }
-    }
-  };
-
   return (
-    <div
-      className={`border-t bg-white relative ${isDragging ? 'bg-green-50' : ''}`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {isDragging && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-100/90 border-2 border-dashed border-green-500 rounded-t-lg backdrop-blur-sm">
-          <p className="text-green-800 font-semibold text-lg flex items-center gap-2">
-            <Paperclip className="h-6 w-6" /> Solte o arquivo aqui para enviar
-          </p>
-        </div>
-      )}
+    <div className="border-t bg-white relative">
       {/* File preview bar */}
       {selectedFile && (
         <div className="flex items-center gap-3 px-4 py-2 bg-green-50 border-b">

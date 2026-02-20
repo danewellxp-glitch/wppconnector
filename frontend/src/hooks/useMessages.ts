@@ -74,9 +74,7 @@ export function useSendMessage() {
       return { real: res.data as Message, optimisticId: optimisticMsg.id };
     },
     onSuccess: ({ real, optimisticId }) => {
-      // Replace optimistic message with real one.
-      // Bug 4: also filter real.id in case the socket already delivered it,
-      // then add it once — prevents duplicates.
+      // Bug 4: filter real.id too in case socket already delivered it
       const messages = useChatStore.getState().messages;
       const convMessages = messages[real.conversationId] || [];
       const updated = convMessages

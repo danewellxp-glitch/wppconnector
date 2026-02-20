@@ -26,14 +26,14 @@ export function AgentStatusBar() {
   const status = user?.onlineStatus ?? 'OFFLINE';
 
   useEffect(() => {
-    // Set ONLINE via REST API immediately on mount — guarantees DB is updated
-    // regardless of socket connection timing
-    apiClient.patch('/users/me/status', { status: 'ONLINE' }).catch(() => { });
+    // Instead of forcing ONLINE, we just ensure the socket knows our current status.
     const socket = getSocket();
     if (socket?.connected) {
-      socket.emit('agent-online');
+      if (status === 'ONLINE') socket.emit('agent-online');
+      else if (status === 'BUSY') socket.emit('agent-busy');
+      else socket.emit('agent-offline');
     }
-  }, []);
+  }, [status]);
 
   const handleStatusChange = (value: Status) => {
     getSocket()?.emit(

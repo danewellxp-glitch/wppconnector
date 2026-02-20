@@ -378,7 +378,7 @@ export class MessagesService {
     const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     const audioExts = ['mp3', 'ogg', 'wav', 'webm'];
 
-    let type = 'DOCUMENT';
+    let type: 'DOCUMENT' | 'IMAGE' | 'AUDIO' = 'DOCUMENT';
     if (imageExts.includes(ext)) type = 'IMAGE';
     else if (audioExts.includes(ext)) type = 'AUDIO';
 

@@ -58,7 +58,10 @@ export class MessagesController {
   ) {
     if (!file) throw new BadRequestException('Arquivo obrigatorio');
     if (!conversationId) throw new BadRequestException('conversationId obrigatorio');
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype) && !VALID_EXTS.includes(ext || '')) {
       throw new BadRequestException('Tipo de arquivo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
     }
     if (file.size > MAX_SIZE) {
