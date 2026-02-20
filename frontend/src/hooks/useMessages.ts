@@ -31,7 +31,15 @@ export function useMessages(conversationId: string | null) {
 
   useEffect(() => {
     if (query.data && conversationId) {
-      setMessages(conversationId, query.data);
+      // Bug 3: merge server messages with any messages already in the store
+      // (socket messages that arrived while the query was loading)
+      const existing = useChatStore.getState().messages[conversationId] || [];
+      const serverIds = new Set(query.data.map((m) => m.id));
+      const extras = existing.filter((m) => !serverIds.has(m.id));
+      const merged = [...query.data, ...extras].sort(
+        (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+      );
+      setMessages(conversationId, merged);
     }
   }, [query.data, conversationId, setMessages]);
 
@@ -66,11 +74,13 @@ export function useSendMessage() {
       return { real: res.data as Message, optimisticId: optimisticMsg.id };
     },
     onSuccess: ({ real, optimisticId }) => {
-      // Replace optimistic message with real one
+      // Replace optimistic message with real one.
+      // Bug 4: also filter real.id in case the socket already delivered it,
+      // then add it once — prevents duplicates.
       const messages = useChatStore.getState().messages;
       const convMessages = messages[real.conversationId] || [];
       const updated = convMessages
-        .filter((m) => m.id !== optimisticId)
+        .filter((m) => m.id !== optimisticId && m.id !== real.id)
         .concat(real);
       useChatStore.getState().setMessages(real.conversationId, updated);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -128,10 +138,11 @@ export function useSendMedia() {
       return { real: res.data as Message, optimisticId: optimisticMsg.id };
     },
     onSuccess: ({ real, optimisticId }) => {
+      // Bug 4: filter real.id too in case socket already delivered it
       const messages = useChatStore.getState().messages;
       const convMessages = messages[real.conversationId] || [];
       const updated = convMessages
-        .filter((m) => m.id !== optimisticId)
+        .filter((m) => m.id !== optimisticId && m.id !== real.id)
         .concat(real);
       useChatStore.getState().setMessages(real.conversationId, updated);
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
