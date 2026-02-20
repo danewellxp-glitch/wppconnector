@@ -100,7 +100,10 @@ export function useSendMedia() {
     }) => {
       const ext = data.file.name.split('.').pop()?.toLowerCase() || '';
       const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-      const type = imageExts.includes(ext) ? MessageType.IMAGE : MessageType.DOCUMENT;
+      const audioExts = ['mp3', 'ogg', 'wav', 'webm'];
+      let type = MessageType.DOCUMENT;
+      if (imageExts.includes(ext)) type = MessageType.IMAGE;
+      else if (audioExts.includes(ext)) type = MessageType.AUDIO;
 
       const optimisticMsg: Message = {
         id: `optimistic-${Date.now()}`,

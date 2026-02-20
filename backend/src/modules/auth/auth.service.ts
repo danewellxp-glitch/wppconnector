@@ -10,7 +10,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   async register(dto: RegisterDto) {
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -56,9 +56,18 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais invalidas');
     }
 
+    // Set user as ONLINE automatically upon successful login
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        onlineStatus: 'ONLINE',
+        lastHeartbeatAt: new Date(),
+      },
+    });
+
     const token = this.generateToken(user);
 
-    const { passwordHash, ...userWithoutPassword } = user;
+    const { passwordHash, ...userWithoutPassword } = updatedUser;
 
     return { user: userWithoutPassword, token };
   }

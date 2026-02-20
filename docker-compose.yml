@@ -25,7 +25,7 @@ services:
       - wpp-network
 
   waha:
-    image: devlikeapro/waha
+    image: devlikeapro/waha-plus
     container_name: wpp-waha
     ports:
       - "3101:3000"

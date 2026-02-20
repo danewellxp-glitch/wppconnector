@@ -7,6 +7,7 @@ import { useSocket } from '@/hooks/useSocket';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { NotificationContainer } from '@/components/NotificationContainer';
+import { UnreadTitleManager } from '@/components/UnreadTitleManager';
 
 export default function DashboardLayout({
   children,
@@ -44,6 +45,7 @@ export default function DashboardLayout({
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
       <NotificationContainer />
+      <UnreadTitleManager />
     </div>
   );
 }

@@ -23,6 +23,17 @@ const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  'text/markdown',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
 ];
 
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -30,7 +41,7 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
 export class MessagesController {
-  constructor(private messagesService: MessagesService) {}
+  constructor(private messagesService: MessagesService) { }
 
   @Post('send')
   send(@CurrentUser() user: any, @Body() dto: SendMessageDto) {
@@ -47,8 +58,11 @@ export class MessagesController {
   ) {
     if (!file) throw new BadRequestException('Arquivo obrigatorio');
     if (!conversationId) throw new BadRequestException('conversationId obrigatorio');
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException('Tipo de arquivo nao permitido. Use JPG, PNG, PDF ou DOCX.');
+    const ext = file.originalname.split('.').pop()?.toLowerCase();
+    const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+
+    if (!ALLOWED_MIME_TYPES.includes(file.mimetype) && !VALID_EXTS.includes(ext || '')) {
+      throw new BadRequestException('Tipo de arquivo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
     }
     if (file.size > MAX_SIZE) {
       throw new BadRequestException('Arquivo muito grande. Limite: 10 MB.');

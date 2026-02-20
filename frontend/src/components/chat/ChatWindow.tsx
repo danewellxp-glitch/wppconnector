@@ -8,7 +8,7 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Phone, MessageSquare } from 'lucide-react';
+import { Phone, MessageSquare, Paperclip } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { getSocket } from '@/lib/socket';
 import { cleanPhone } from '@/lib/utils';
@@ -23,6 +23,10 @@ export function ChatWindow() {
   const { joinConversation, leaveConversation } = useSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
 
   const conversation = conversations.find((c) => c.id === selectedId);
 
@@ -62,7 +66,7 @@ export function ChatWindow() {
     setTypingUsers({});
 
     // Mark as read
-    apiClient.post(`/conversations/${selectedId}/read`).catch(() => {});
+    apiClient.post(`/conversations/${selectedId}/read`).catch(() => { });
 
     return () => {
       leaveConversation(selectedId);
@@ -75,6 +79,35 @@ export function ChatWindow() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setDroppedFile(e.dataTransfer.files[0]);
+    }
+  };
 
   if (!selectedId || !conversation) {
     return (
@@ -95,7 +128,28 @@ export function ChatWindow() {
     .toUpperCase();
 
   return (
-    <div className="flex flex-1 flex-col bg-gray-50">
+    <div
+      className="flex flex-1 flex-col bg-gray-50 relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-green-100/90 border-4 border-dashed border-green-500 backdrop-blur-sm m-4 rounded-lg pointer-events-none transition-all">
+          <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col items-center gap-3">
+            <div className="h-16 w-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-2">
+              <Paperclip className="h-8 w-8" />
+            </div>
+            <p className="text-gray-900 font-semibold text-xl">
+              Solte o arquivo para enviar
+            </p>
+            <p className="text-gray-500 text-sm">
+              Anexe documentos, imagens ou planilhas a esta conversa.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Chat Header */}
       <div className="flex items-center gap-3 border-b bg-white px-6 py-3">
         <Avatar className="h-10 w-10">
@@ -155,7 +209,11 @@ export function ChatWindow() {
       </div>
 
       {/* Input */}
-      <MessageInput conversationId={selectedId} />
+      <MessageInput
+        conversationId={selectedId}
+        droppedFile={droppedFile}
+        onClearDroppedFile={() => setDroppedFile(null)}
+      />
     </div>
   );
 }

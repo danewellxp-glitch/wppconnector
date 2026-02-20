@@ -39,7 +39,6 @@ export class WahaWebhookController {
 
       switch (event) {
         case 'message':
-        case 'message.any':
           // Ignore outbound messages (fromMe = true)
           if (payload.fromMe) {
             this.logger.debug('Ignoring outbound message');
@@ -47,6 +46,10 @@ export class WahaWebhookController {
           }
           await this.handleIncomingMessage(payload);
           break;
+        case 'message.any':
+          // Ignore message.any completely for now to avoid duplicate processing,
+          // since the 'message' event already catches all inbound messages.
+          return 'OK';
         case 'message.ack':
           await this.handleStatusUpdate(payload);
           break;
@@ -67,7 +70,7 @@ export class WahaWebhookController {
       return;
     }
 
-    this.logger.log(`Incoming message from ${chatId}`);
+    this.logger.log(`Incoming message from ${chatId} `);
 
     // Find the first company (WAHA is for testing only)
     const company = await this.prisma.company.findFirst();
@@ -97,7 +100,7 @@ export class WahaWebhookController {
     const whatsappMessageId =
       typeof payload.id === 'string'
         ? payload.id
-        : payload.id?._serialized || payload.id?.id || `waha_${Date.now()}`;
+        : payload.id?._serialized || payload.id?.id || `waha_${Date.now()} `;
 
     const customerName =
       contactInfo?.pushname ||
@@ -175,13 +178,29 @@ export class WahaWebhookController {
           return;
         }
 
-        // Sem sugestão anterior, enviar saudação padrão
-        this.logger.log(`[FLOW] Sending greeting to ${customerPhone}`);
-        await this.flowEngineService.sendGreeting(conversation);
-        await this.prisma.conversation.update({
-          where: { id: conversation.id },
-          data: { greetingSentAt: new Date() },
-        });
+        // Sem sugestão anterior: verificar horário comercial
+        if (!this.flowEngineService.isBusinessHours()) {
+          this.logger.log(`[FLOW] Out of hours for ${customerPhone}. Sending offline message...`);
+          await this.flowEngineService.sendOutOfHoursMessage(conversation);
+
+          // Route immediately to Admin so it stays in the queue for the next business day
+          const adminDept = await this.flowEngineService.resolveDepartmentSlug(company.id, 'administrativo');
+          if (adminDept) {
+            await this.departmentRoutingService.routeToDepartment(
+              conversation.id,
+              adminDept.slug,
+              company.id,
+            );
+          }
+        } else {
+          // Horário comercial, prossegue com o menu normal
+          this.logger.log(`[FLOW] Sending greeting to ${customerPhone} `);
+          await this.flowEngineService.sendGreeting(conversation);
+          await this.prisma.conversation.update({
+            where: { id: conversation.id },
+            data: { greetingSentAt: new Date() },
+          });
+        }
       } else {
         // Second message: process menu choice
         const body = (content || '').trim();
@@ -200,7 +219,7 @@ export class WahaWebhookController {
               company.id,
             );
           } else {
-            this.logger.warn(`[FLOW] No department resolved for slug '${slugHint}' in company ${company.id}`);
+            this.logger.warn(`[FLOW] No department resolved for slug '${slugHint}' in company ${company.id} `);
             await this.flowEngineService.handleInvalidChoice(conversation);
           }
         } else {
@@ -237,7 +256,7 @@ export class WahaWebhookController {
       if (result.accepted && result.departmentId) {
         // Cliente aceitou sugestão de retorno
         this.logger.log(
-          `[ROUTING] Client accepted routing suggestion. Routing to department: ${result.departmentId}`,
+          `[ROUTING] Client accepted routing suggestion.Routing to department: ${result.departmentId} `,
         );
 
         // Tentar atribuir agente
@@ -276,7 +295,7 @@ export class WahaWebhookController {
 
     // 🔄 Handle TIMEOUT_REDIRECT: cliente aguardando agente, tenta reatribuir silenciosamente
     if (conversation.flowState === 'TIMEOUT_REDIRECT') {
-      this.logger.log(`[FLOW] TIMEOUT_REDIRECT: tentando reatribuir conversa ${conversation.id}`);
+      this.logger.log(`[FLOW] TIMEOUT_REDIRECT: tentando reatribuir conversa ${conversation.id} `);
 
       if (conversation.departmentId) {
         const dept = await this.prisma.department.findUnique({
@@ -289,7 +308,7 @@ export class WahaWebhookController {
         );
 
         if (agent) {
-          this.logger.log(`[FLOW] Agente ${agent.name} disponível agora, atribuindo conversa ${conversation.id}`);
+          this.logger.log(`[FLOW] Agente ${agent.name} disponível agora, atribuindo conversa ${conversation.id} `);
           // Notificar cliente que um agente está disponível (sem reenviar o menu)
           const deptName = dept?.name || 'Atendimento';
           const sendTo = (conversation.metadata as any)?.chatId || conversation.customerPhone;
@@ -297,7 +316,7 @@ export class WahaWebhookController {
             company.whatsappAccessToken,
             company.whatsappPhoneNumberId,
             sendTo,
-            `✅ Um atendente do setor *${deptName}* está disponível!\n\nConectando com *${agent.name}*... 😊`,
+            `✅ Um atendente do setor * ${deptName} * está disponível!\n\nConectando com * ${agent.name}*... 😊`,
           ).catch(() => { });
         }
         // Se ainda sem agentes: salva a mensagem silenciosamente, sem reenviar "indisponíveis"

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Paperclip, X, FileText, Image } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Image, Mic } from 'lucide-react';
 import { useSendMessage, useSendMedia } from '@/hooks/useMessages';
 import { useSocket } from '@/hooks/useSocket';
 import { QuickRepliesPanel } from './QuickRepliesPanel';
@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 
 interface MessageInputProps {
   conversationId: string;
+  droppedFile?: File | null;
+  onClearDroppedFile?: () => void;
 }
 
 const ALLOWED_TYPES = [
@@ -17,10 +19,21 @@ const ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  'text/markdown',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/wav',
+  'audio/webm',
 ];
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
-export function MessageInput({ conversationId }: MessageInputProps) {
+export function MessageInput({ conversationId, droppedFile, onClearDroppedFile }: MessageInputProps) {
   const [content, setContent] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
@@ -37,6 +50,31 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     textareaRef.current?.focus();
   }, [conversationId]);
 
+  useEffect(() => {
+    if (droppedFile) {
+      const ext = droppedFile.name.split('.').pop()?.toLowerCase();
+      const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+
+      if (!ALLOWED_TYPES.includes(droppedFile.type) && !VALID_EXTS.includes(ext || '')) {
+        toast.error('Tipo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
+        onClearDroppedFile?.();
+        return;
+      }
+      if (droppedFile.size > MAX_SIZE) {
+        toast.error('Arquivo muito grande. Limite: 10 MB.');
+        onClearDroppedFile?.();
+        return;
+      }
+      setSelectedFile(droppedFile);
+      if (droppedFile.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
+        setFilePreview(URL.createObjectURL(droppedFile));
+      } else {
+        setFilePreview(null);
+      }
+      onClearDroppedFile?.();
+    }
+  }, [droppedFile, onClearDroppedFile]);
+
   // Revoke object URL on cleanup
   useEffect(() => {
     return () => {
@@ -48,8 +86,11 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error('Tipo nao permitido. Use JPG, PNG, PDF ou DOCX.');
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+
+    if (!ALLOWED_TYPES.includes(file.type) && !VALID_EXTS.includes(ext || '')) {
+      toast.error('Tipo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
       return;
     }
     if (file.size > MAX_SIZE) {
@@ -58,7 +99,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }
 
     setSelectedFile(file);
-    if (file.type.startsWith('image/')) {
+    if (file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
       setFilePreview(URL.createObjectURL(file));
     } else {
       setFilePreview(null);
@@ -127,7 +168,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   }, [content]);
 
   return (
-    <div className="border-t bg-white">
+    <div className="border-t bg-white relative">
       {/* File preview bar */}
       {selectedFile && (
         <div className="flex items-center gap-3 px-4 py-2 bg-green-50 border-b">
@@ -159,7 +200,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx"
+          accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.md,.mp3,.ogg,.wav,.webm"
           className="hidden"
           onChange={handleFileSelect}
         />
@@ -171,6 +212,8 @@ export function MessageInput({ conversationId }: MessageInputProps) {
         >
           {selectedFile?.type.startsWith('image/') ? (
             <Image className="h-4 w-4 text-green-600" />
+          ) : selectedFile?.type.startsWith('audio/') ? (
+            <Mic className="h-4 w-4 text-green-600" />
           ) : (
             <Paperclip className="h-4 w-4 text-gray-500" />
           )}

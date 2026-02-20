@@ -12,6 +12,7 @@ import {
   Mic,
   Video,
   Bot,
+  Download,
 } from 'lucide-react';
 
 function StatusIcon({ status }: { status: MessageStatus }) {
@@ -32,15 +33,41 @@ function StatusIcon({ status }: { status: MessageStatus }) {
 }
 
 function MediaContent({ message }: { message: Message }) {
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (message.mediaUrl) {
+      window.open(message.mediaUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const DownloadButton = () => message.mediaUrl ? (
+    <button
+      onClick={handleDownload}
+      className="ml-2 p-1 rounded-full hover:bg-black/10 transition-colors"
+      title="Baixar arquivo"
+    >
+      <Download className="h-4 w-4 opacity-70" />
+    </button>
+  ) : null;
+
   switch (message.type) {
     case MessageType.IMAGE:
       return message.mediaUrl ? (
-        <img
-          src={message.mediaUrl}
-          alt={message.content || 'Imagem'}
-          className="max-w-full rounded-md mb-1"
-          loading="lazy"
-        />
+        <div className="relative group inline-block max-w-full mb-1">
+          <img
+            src={message.mediaUrl}
+            alt={message.content || 'Imagem'}
+            className="rounded-md"
+            loading="lazy"
+          />
+          <button
+            onClick={handleDownload}
+            className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/70 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+            title="Baixar imagem"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+        </div>
       ) : (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>[Imagem]</span>
@@ -49,16 +76,24 @@ function MediaContent({ message }: { message: Message }) {
 
     case MessageType.DOCUMENT:
       return (
-        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md mb-1">
-          <FileText className="h-5 w-5 text-blue-500 shrink-0" />
-          <span className="text-sm truncate">
-            {message.content || 'Documento'}
-          </span>
+        <div className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-md mb-1 border cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleDownload}>
+          <div className="flex items-center gap-2 overflow-hidden">
+            <FileText className="h-5 w-5 text-blue-500 shrink-0" />
+            <span className="text-sm truncate font-medium">
+              {message.content || 'Documento'}
+            </span>
+          </div>
+          <DownloadButton />
         </div>
       );
 
     case MessageType.AUDIO:
-      return (
+      return message.mediaUrl ? (
+        <div className="flex items-center gap-2 mb-1">
+          <audio controls src={message.mediaUrl} className="max-w-[200px] h-10" />
+          <DownloadButton />
+        </div>
+      ) : (
         <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md mb-1">
           <Mic className="h-5 w-5 text-green-500 shrink-0" />
           <span className="text-sm">Audio</span>
@@ -67,11 +102,14 @@ function MediaContent({ message }: { message: Message }) {
 
     case MessageType.VIDEO:
       return (
-        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md mb-1">
-          <Video className="h-5 w-5 text-purple-500 shrink-0" />
-          <span className="text-sm">
-            {message.content || 'Video'}
-          </span>
+        <div className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-md mb-1 border cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleDownload}>
+          <div className="flex items-center gap-2">
+            <Video className="h-5 w-5 text-purple-500 shrink-0" />
+            <span className="text-sm font-medium">
+              {message.content || 'Video'}
+            </span>
+          </div>
+          <DownloadButton />
         </div>
       );
 

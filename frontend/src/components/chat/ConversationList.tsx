@@ -18,6 +18,7 @@ const STATUS_FILTERS = [
   { value: '', label: 'Todas' },
   { value: 'OPEN', label: 'Abertas' },
   { value: 'ASSIGNED', label: 'Em atendimento' },
+  { value: 'OFFLINE_QUEUE', label: 'Fila / Aguardando' },
   { value: 'RESOLVED', label: 'Resolvidas' },
   { value: 'ARCHIVED', label: 'Arquivadas' },
 ] as const;
@@ -36,7 +37,17 @@ export function ConversationList() {
     const matchesSearch =
       cleanPhone(c.customerPhone).includes(term) ||
       c.customerName?.toLowerCase().includes(term);
-    const matchesStatus = !statusFilter || c.status === statusFilter;
+
+    let matchesStatus = true;
+    if (statusFilter === 'OFFLINE_QUEUE') {
+      matchesStatus = c.status === 'OPEN' && !c.assignedUser && !c.assignedUserId;
+    } else if (statusFilter === 'OPEN') {
+      // Para "Abertas", mostrar apenas as que não são da fila offline para não poluir
+      matchesStatus = c.status === 'OPEN' && (!c.departmentId || c.flowState !== 'DEPARTMENT_SELECTED');
+    } else if (statusFilter) {
+      matchesStatus = c.status === statusFilter;
+    }
+
     return matchesSearch && matchesStatus;
   });
 

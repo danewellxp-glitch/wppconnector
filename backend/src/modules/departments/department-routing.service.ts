@@ -160,6 +160,7 @@ export class DepartmentRoutingService {
             assignedAt: new Date(),
             flowState: 'ASSIGNED',
             status: 'ASSIGNED',
+            timeoutAt: null,
           },
         });
 
@@ -230,17 +231,22 @@ export class DepartmentRoutingService {
       );
       await this.prisma.conversation.update({
         where: { id: conv.id },
-        data: { flowState: 'DEPARTMENT_SELECTED', status: 'OPEN' },
+        data: { flowState: 'DEPARTMENT_SELECTED', status: 'OPEN', timeoutAt: null },
       });
       if (conv.departmentId) {
         await this.assignToAgent(conv.id, conv.departmentId);
       }
     }
 
+    const adminDept = await this.prisma.department.findFirst({
+      where: { isRoot: true, isActive: true },
+    });
+
     const timedOut = await this.prisma.conversation.findMany({
       where: {
         flowState: 'DEPARTMENT_SELECTED',
         timeoutAt: { lt: new Date() },
+        departmentId: { not: adminDept?.id }, // Don't redirect if already in Admin
       },
       include: { company: true, department: true },
     });
@@ -284,6 +290,7 @@ export class DepartmentRoutingService {
           assignedUserId: null,
           flowState: 'DEPARTMENT_SELECTED',
           status: 'OPEN',
+          timeoutAt: null,
         },
       });
 
@@ -418,12 +425,14 @@ export class DepartmentRoutingService {
         messages[reason],
       );
     } else {
-      // todos offline — voltar para GREETING para o cliente poder tentar novamente
+      // todos offline — manter a conversa na fila do Administrativo para que
+      // os atendentes vejam a conversa pendente quando voltarem a ficar online.
+      // E remover o timeoutAt para que ela não fique roteada em loop.
       await this.prisma.conversation.update({
         where: { id: conversationId },
         data: {
-          flowState: 'GREETING',
-          departmentId: null,
+          flowState: 'DEPARTMENT_SELECTED',
+          departmentId: adminDept.id,
           assignedUserId: null,
           timeoutAt: null,
           status: 'OPEN',

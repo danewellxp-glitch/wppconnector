@@ -118,6 +118,61 @@ export class FlowEngineService {
     );
   }
 
+  isBusinessHours(): boolean {
+    const now = new Date();
+    // Converter a hora atual do servidor para UTC-3 (Horário de Brasília) para segurança
+    const spTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+
+    const day = spTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const hours = spTime.getHours();
+
+    // Segunda a Sexta (1 a 5), das 08h00 às 17h59
+    if (day >= 1 && day <= 5) {
+      if (hours >= 8 && hours < 18) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getOutOfHoursMessage(): string {
+    return 'Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\nSua mensagem foi registrada e retornaremos o contato em nosso horário comercial. 🙏';
+  }
+
+  async sendOutOfHoursMessage(conversation: {
+    id: string;
+    companyId: string;
+  }) {
+    const fullConv = await this.prisma.conversation.findUnique({
+      where: { id: conversation.id },
+      include: { company: true },
+    });
+    if (!fullConv) return;
+
+    const text = this.getOutOfHoursMessage();
+    const meta = (fullConv.metadata as any) || {};
+    const sendTo = meta.chatId || fullConv.customerPhone;
+
+    await this.whatsappService.sendTextMessage(
+      fullConv.company.whatsappAccessToken,
+      fullConv.company.whatsappPhoneNumberId,
+      sendTo,
+      text,
+    );
+
+    await this.prisma.message.create({
+      data: {
+        companyId: fullConv.companyId,
+        conversationId: fullConv.id,
+        direction: 'OUTBOUND',
+        type: 'TEXT',
+        content: text,
+        status: 'SENT',
+        isBot: true,
+      },
+    });
+  }
+
   async sendGreeting(conversation: {
     id: string;
     companyId: string;

@@ -13,7 +13,7 @@ import {
   CardTitle,
   CardContent,
 } from '@/components/ui/card';
-import { MessageSquare } from 'lucide-react';
+import Image from 'next/image';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -59,12 +59,19 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-          <MessageSquare className="h-6 w-6 text-green-600" />
+        <div className="mx-auto mb-6 flex justify-center">
+          <Image
+            src="/LogoMax.png"
+            alt="WPPConnector Logo"
+            width={300}
+            height={100}
+            className="h-20 w-auto object-contain"
+            priority
+          />
         </div>
-        <CardTitle className="text-2xl">WhatsApp Business Dashboard</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Entre com suas credenciais para acessar o painel
+        <CardTitle className="text-2xl text-[#22184c]">Acesso ao Sistema</CardTitle>
+        <p className="text-sm text-gray-500">
+          Entre com suas credenciais para acessar o painel integrado
         </p>
       </CardHeader>
       <CardContent>
@@ -105,8 +112,8 @@ export function LoginForm() {
             <p className="text-sm text-red-500 text-center">{error}</p>
           )}
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar'}
+          <Button type="submit" className="w-full bg-[#1893c8] hover:bg-[#147aa6] text-white transition-colors" disabled={loading}>
+            {loading ? 'Entrando...' : 'Entrar na Plataforma'}
           </Button>
         </form>
       </CardContent>

@@ -8,9 +8,9 @@ NC='\033[0m' # No Color
 echo -e "${YELLOW}Starting WPPConnector Services...${NC}"
 
 # Check if Docker containers are running
-if ! docker compose ps | grep -q "Up"; then
+if ! docker-compose ps | grep -q "Up"; then
     echo -e "${YELLOW}Docker containers not running. Starting them...${NC}"
-    docker compose up -d
+    docker-compose up -d
 else
     echo -e "${GREEN}Docker containers are running.${NC}"
 fi

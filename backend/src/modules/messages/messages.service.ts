@@ -376,7 +376,11 @@ export class MessagesService {
 
     const ext = filename.split('.').pop()?.toLowerCase() || '';
     const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    const type = imageExts.includes(ext) ? 'IMAGE' : 'DOCUMENT';
+    const audioExts = ['mp3', 'ogg', 'wav', 'webm'];
+
+    let type: 'DOCUMENT' | 'IMAGE' | 'AUDIO' = 'DOCUMENT';
+    if (imageExts.includes(ext)) type = 'IMAGE';
+    else if (audioExts.includes(ext)) type = 'AUDIO';
 
     const messageContent = caption || filename;
 

@@ -362,6 +362,11 @@ export function CustomerInfo({ conversation }: CustomerInfoProps) {
 
       <Separator />
 
+      {/* Internal Notes */}
+      <ConversationNotes conversationId={conversation.id} />
+
+      <Separator />
+
       {/* Info */}
       <div className="p-4">
         <h4 className="text-xs font-semibold text-muted-foreground uppercase mb-2">
@@ -395,11 +400,6 @@ export function CustomerInfo({ conversation }: CustomerInfoProps) {
           )}
         </div>
       </div>
-
-      <Separator />
-
-      {/* Internal Notes */}
-      <ConversationNotes conversationId={conversation.id} />
     </div>
   );
 }
