@@ -125,7 +125,7 @@ export function MessageInput({ conversationId, droppedFile, onClearDroppedFile }
         { conversationId, file: selectedFile, caption: content.trim() || undefined },
         {
           onSuccess: () => { clearFile(); setContent(''); },
-          onError: () => toast.error('Erro ao enviar arquivo'),
+          onError: () => { toast.error('Erro ao enviar arquivo'); clearFile(); },
         },
       );
       return;

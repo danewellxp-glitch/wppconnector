@@ -6,6 +6,7 @@ import { MessagesService } from '../messages/messages.service';
 import { WhatsappService } from './whatsapp.service';
 import { FlowEngineService } from './flow-engine.service';
 import { DepartmentRoutingService } from '../departments/department-routing.service';
+import { ConversationRoutingService } from '../conversations/conversation-routing.service';
 
 @Injectable()
 export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
@@ -24,6 +25,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
     private whatsappService: WhatsappService,
     private flowEngineService: FlowEngineService,
     private departmentRoutingService: DepartmentRoutingService,
+    private conversationRoutingService: ConversationRoutingService,
   ) {
     this.provider =
       this.configService.get<string>('WHATSAPP_PROVIDER') || 'META';
@@ -190,7 +192,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           `Processing message: ${whatsappMessageId} from ${customerPhone}`,
         );
 
-        const conversation =
+        let conversation =
           await this.messagesService.findOrCreateConversation(
             company.id,
             customerPhone,
@@ -198,6 +200,24 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             chatId,
             contactProfile,
           );
+
+        // Reabrir conversa resolvida
+        if (conversation.status === 'RESOLVED') {
+          this.logger.log(`[FLOW] Conversa RESOLVED — reabrindo para ${customerPhone}`);
+          conversation = await this.prisma.conversation.update({
+            where: { id: conversation.id },
+            data: {
+              status: 'OPEN',
+              flowState: 'GREETING',
+              greetingSentAt: null,
+              assignedUserId: null,
+              assignedAt: null,
+              departmentId: null,
+              routedAt: null,
+              timeoutAt: null,
+            },
+          });
+        }
 
         if (conversation.flowState === 'GREETING') {
           if (!conversation.greetingSentAt) {
@@ -208,13 +228,14 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             });
           } else {
             const body = (msg.body || '').trim();
-            const dept = this.flowEngineService.processMenuChoice(body);
-            if (dept) {
-              await this.departmentRoutingService.routeToDepartment(
-                conversation.id,
-                dept,
-                company.id,
-              );
+            const slugHint = this.flowEngineService.processMenuChoice(body);
+            if (slugHint) {
+              const resolvedDept = await this.flowEngineService.resolveDepartmentSlug(company.id, slugHint);
+              if (resolvedDept) {
+                await this.departmentRoutingService.routeToDepartment(conversation.id, resolvedDept.slug, company.id);
+              } else {
+                await this.flowEngineService.handleInvalidChoice(conversation);
+              }
             } else {
               await this.flowEngineService.handleInvalidChoice(conversation);
             }
@@ -231,6 +252,34 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             mediaUrl,
             chatId,
             contactProfile,
+          );
+          continue;
+        }
+
+        // Resposta à sugestão de roteamento inteligente
+        if (conversation.flowState === 'AWAITING_ROUTING_CONFIRMATION') {
+          const body = (msg.body || '').trim();
+          this.logger.log(`[ROUTING] Processando resposta de sugestão de roteamento: "${body}"`);
+          const result = await this.conversationRoutingService.handleRoutingSuggestionResponse(conversation.id, body);
+          if (result.accepted && result.departmentId) {
+            const department = await this.prisma.department.findUnique({ where: { id: result.departmentId } });
+            if (department) {
+              await this.departmentRoutingService.assignToAgent(conversation.id, result.departmentId);
+            }
+          }
+          await this.messagesService.handleIncomingMessage(
+            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile,
+          );
+          continue;
+        }
+
+        // TIMEOUT_REDIRECT: tenta reatribuir silenciosamente
+        if (conversation.flowState === 'TIMEOUT_REDIRECT') {
+          if (conversation.departmentId) {
+            await this.departmentRoutingService.assignToAgent(conversation.id, conversation.departmentId);
+          }
+          await this.messagesService.handleIncomingMessage(
+            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile,
           );
           continue;
         }

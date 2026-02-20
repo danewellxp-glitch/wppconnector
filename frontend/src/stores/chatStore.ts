@@ -17,6 +17,7 @@ interface ChatState {
   ) => void;
   updateConversation: (conversation: Partial<Conversation> & { id: string }) => void;
   incrementUnread: (conversationId: string) => void;
+  resetUnread: (conversationId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -70,6 +71,13 @@ export const useChatStore = create<ChatState>((set) => ({
         c.id === conversationId
           ? { ...c, unreadCount: c.unreadCount + 1 }
           : c,
+      ),
+    })),
+
+  resetUnread: (conversationId) =>
+    set((state) => ({
+      conversations: state.conversations.map((c) =>
+        c.id === conversationId ? { ...c, unreadCount: 0 } : c,
       ),
     })),
 }));

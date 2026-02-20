@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { useMessages } from '@/hooks/useMessages';
 import { useSocket } from '@/hooks/useSocket';
@@ -19,9 +19,11 @@ export function ChatWindow() {
   const selectedId = useChatStore((s) => s.selectedConversationId);
   const conversations = useChatStore((s) => s.conversations);
   const allMessages = useChatStore((s) => s.messages);
+  const resetUnread = useChatStore((s) => s.resetUnread);
   const messages = selectedId ? allMessages[selectedId] ?? EMPTY_MESSAGES : EMPTY_MESSAGES;
   const { joinConversation, leaveConversation } = useSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
 
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
@@ -64,8 +66,10 @@ export function ChatWindow() {
     if (!selectedId) return;
     joinConversation(selectedId);
     setTypingUsers({});
+    isAtBottomRef.current = true;
 
-    // Mark as read
+    // Reset badge immediately and notify server
+    resetUnread(selectedId);
     apiClient.post(`/conversations/${selectedId}/read`).catch(() => { });
 
     return () => {
@@ -73,9 +77,21 @@ export function ChatWindow() {
     };
   }, [selectedId]);
 
-  // Auto-scroll to bottom
+  // Track if user is near the bottom
   useEffect(() => {
-    if (scrollRef.current) {
+    const el = scrollRef.current;
+    if (!el) return;
+    const handleScroll = () => {
+      isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    };
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Auto-scroll: always on conversation switch, only if at bottom on new messages
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    if (isAtBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
