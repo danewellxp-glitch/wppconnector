@@ -9,7 +9,12 @@ export class MetricsService {
 
   private getPeriodRange(period?: string): { start: Date; end: Date } {
     const end = new Date();
-    const days: Record<Period, number> = { '1d': 1, '7d': 7, '30d': 30, '90d': 90 };
+    const days: Record<Period, number> = {
+      '1d': 1,
+      '7d': 7,
+      '30d': 30,
+      '90d': 90,
+    };
     const p = (period as Period) || '30d';
     const ms = (days[p] ?? 30) * 24 * 60 * 60 * 1000;
     return { start: new Date(end.getTime() - ms), end };
@@ -35,8 +40,12 @@ export class MetricsService {
       this.prisma.message.count({
         where: { companyId, sentAt: { gte: today } },
       }),
-      this.prisma.conversation.count({ where: { companyId, createdAt: { gte: start } } }),
-      this.prisma.message.count({ where: { companyId, sentAt: { gte: start } } }),
+      this.prisma.conversation.count({
+        where: { companyId, createdAt: { gte: start } },
+      }),
+      this.prisma.message.count({
+        where: { companyId, sentAt: { gte: start } },
+      }),
     ]);
 
     const statusCounts = {
@@ -74,21 +83,22 @@ export class MetricsService {
 
   async getConversationMetrics(companyId: string, period?: string) {
     const { start } = this.getPeriodRange(period);
-    const halfPeriod = new Date(start.getTime() + (Date.now() - start.getTime()) / 2);
+    const halfPeriod = new Date(
+      start.getTime() + (Date.now() - start.getTime()) / 2,
+    );
 
-    const [conversationsInPeriod, resolvedInPeriod] =
-      await Promise.all([
-        this.prisma.conversation.count({
-          where: { companyId, createdAt: { gte: start } },
-        }),
-        this.prisma.conversation.count({
-          where: {
-            companyId,
-            status: 'RESOLVED',
-            updatedAt: { gte: start },
-          },
-        }),
-      ]);
+    const [conversationsInPeriod, resolvedInPeriod] = await Promise.all([
+      this.prisma.conversation.count({
+        where: { companyId, createdAt: { gte: start } },
+      }),
+      this.prisma.conversation.count({
+        where: {
+          companyId,
+          status: 'RESOLVED',
+          updatedAt: { gte: start },
+        },
+      }),
+    ]);
 
     // Average first response time using selected period
     const conversations = await this.prisma.conversation.findMany({
@@ -108,9 +118,12 @@ export class MetricsService {
 
     for (const conv of conversations) {
       const firstInbound = conv.messages.find((m) => m.direction === 'INBOUND');
-      const firstOutbound = conv.messages.find((m) => m.direction === 'OUTBOUND');
+      const firstOutbound = conv.messages.find(
+        (m) => m.direction === 'OUTBOUND',
+      );
       if (firstInbound && firstOutbound) {
-        const diff = firstOutbound.sentAt.getTime() - firstInbound.sentAt.getTime();
+        const diff =
+          firstOutbound.sentAt.getTime() - firstInbound.sentAt.getTime();
         if (diff > 0) {
           totalResponseTime += diff;
           responseCount++;

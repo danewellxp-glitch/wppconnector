@@ -157,7 +157,12 @@ export class ConversationRoutingService {
     }
 
     // Tipo de resposta: NÃO
-    if (response.includes('NÃO') || response.includes('NAO') || response === '0' || response === 'N') {
+    if (
+      response.includes('NÃO') ||
+      response.includes('NAO') ||
+      response === '0' ||
+      response === 'N'
+    ) {
       this.logger.log(
         `[ROUTING] Cliente rejeitou sugestão de roteamento. Retornando ao menu inicial.`,
       );

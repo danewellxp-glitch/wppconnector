@@ -61,11 +61,11 @@ export function LoginForm() {
       <CardHeader className="text-center">
         <div className="mx-auto mb-6 flex justify-center">
           <Image
-            src="/LogoMax.png"
-            alt="WPPConnector Logo"
-            width={300}
-            height={100}
-            className="h-20 w-auto object-contain"
+            src="/Velocelogo.png"
+            alt="Veloce Logo"
+            width={517}
+            height={173}
+            className="h-[138px] w-auto object-contain"
             priority
           />
         </div>

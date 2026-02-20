@@ -14,7 +14,11 @@ import { NotificationsModule } from '../notifications/notifications.module';
     forwardRef(() => NotificationsModule),
   ],
   controllers: [DepartmentsController],
-  providers: [DepartmentsService, DepartmentRoutingService, DepartmentRoutingCron],
+  providers: [
+    DepartmentsService,
+    DepartmentRoutingService,
+    DepartmentRoutingCron,
+  ],
   exports: [DepartmentsService, DepartmentRoutingService],
 })
 export class DepartmentsModule {}

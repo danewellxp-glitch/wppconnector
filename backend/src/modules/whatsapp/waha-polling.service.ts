@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -30,9 +35,9 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
     this.provider =
       this.configService.get<string>('WHATSAPP_PROVIDER') || 'META';
     this.wahaApiUrl =
-      this.configService.get<string>('WAHA_API_URL') || 'http://192.168.10.156:3101';
-    this.wahaApiKey =
-      this.configService.get<string>('WAHA_API_KEY') || '';
+      this.configService.get<string>('WAHA_API_URL') ||
+      'http://192.168.10.156:3101';
+    this.wahaApiKey = this.configService.get<string>('WAHA_API_KEY') || '';
     this.wahaSession =
       this.configService.get<string>('WAHA_SESSION') || 'default';
   }
@@ -51,16 +56,16 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
   }
 
   private wahaHeaders() {
-    return this.wahaApiKey
-      ? { 'X-Api-Key': this.wahaApiKey }
-      : {};
+    return this.wahaApiKey ? { 'X-Api-Key': this.wahaApiKey } : {};
   }
 
   private async poll() {
     if (this.polling) return;
     this.polling = true;
     try {
-      this.logger.debug(`Polling ${this.wahaApiUrl}/api/${this.wahaSession}/chats/overview`);
+      this.logger.debug(
+        `Polling ${this.wahaApiUrl}/api/${this.wahaSession}/chats/overview`,
+      );
       // Get chats with unread messages
       const res = await axios.get(
         `${this.wahaApiUrl}/api/${this.wahaSession}/chats/overview`,
@@ -85,9 +90,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      this.logger.log(
-        `Found ${unreadChats.length} chats with unread messages`,
-      );
+      this.logger.log(`Found ${unreadChats.length} chats with unread messages`);
 
       const company = await this.prisma.company.findFirst();
       if (!company) {
@@ -107,9 +110,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
   private async processChat(chat: any, company: any) {
     try {
       const chatId =
-        typeof chat.id === 'string'
-          ? chat.id
-          : chat.id?._serialized || '';
+        typeof chat.id === 'string' ? chat.id : chat.id?._serialized || '';
       if (!chatId) return;
 
       // Fetch recent messages for this chat
@@ -143,8 +144,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         let customerPhone = chatId;
         let contactProfile: any = null;
 
-        const contactInfo =
-          await this.whatsappService.getContactInfo(chatId);
+        const contactInfo = await this.whatsappService.getContactInfo(chatId);
         if (contactInfo?.number) {
           customerPhone = contactInfo.number;
           contactProfile = {
@@ -192,18 +192,19 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           `Processing message: ${whatsappMessageId} from ${customerPhone}`,
         );
 
-        let conversation =
-          await this.messagesService.findOrCreateConversation(
-            company.id,
-            customerPhone,
-            customerName,
-            chatId,
-            contactProfile,
-          );
+        let conversation = await this.messagesService.findOrCreateConversation(
+          company.id,
+          customerPhone,
+          customerName,
+          chatId,
+          contactProfile,
+        );
 
         // Reabrir conversa resolvida
         if (conversation.status === 'RESOLVED') {
-          this.logger.log(`[FLOW] Conversa RESOLVED — reabrindo para ${customerPhone}`);
+          this.logger.log(
+            `[FLOW] Conversa RESOLVED — reabrindo para ${customerPhone}`,
+          );
           conversation = await this.prisma.conversation.update({
             where: { id: conversation.id },
             data: {
@@ -230,9 +231,17 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             const body = (msg.body || '').trim();
             const slugHint = this.flowEngineService.processMenuChoice(body);
             if (slugHint) {
-              const resolvedDept = await this.flowEngineService.resolveDepartmentSlug(company.id, slugHint);
+              const resolvedDept =
+                await this.flowEngineService.resolveDepartmentSlug(
+                  company.id,
+                  slugHint,
+                );
               if (resolvedDept) {
-                await this.departmentRoutingService.routeToDepartment(conversation.id, resolvedDept.slug, company.id);
+                await this.departmentRoutingService.routeToDepartment(
+                  conversation.id,
+                  resolvedDept.slug,
+                  company.id,
+                );
               } else {
                 await this.flowEngineService.handleInvalidChoice(conversation);
               }
@@ -259,16 +268,35 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         // Resposta à sugestão de roteamento inteligente
         if (conversation.flowState === 'AWAITING_ROUTING_CONFIRMATION') {
           const body = (msg.body || '').trim();
-          this.logger.log(`[ROUTING] Processando resposta de sugestão de roteamento: "${body}"`);
-          const result = await this.conversationRoutingService.handleRoutingSuggestionResponse(conversation.id, body);
+          this.logger.log(
+            `[ROUTING] Processando resposta de sugestão de roteamento: "${body}"`,
+          );
+          const result =
+            await this.conversationRoutingService.handleRoutingSuggestionResponse(
+              conversation.id,
+              body,
+            );
           if (result.accepted && result.departmentId) {
-            const department = await this.prisma.department.findUnique({ where: { id: result.departmentId } });
+            const department = await this.prisma.department.findUnique({
+              where: { id: result.departmentId },
+            });
             if (department) {
-              await this.departmentRoutingService.assignToAgent(conversation.id, result.departmentId);
+              await this.departmentRoutingService.assignToAgent(
+                conversation.id,
+                result.departmentId,
+              );
             }
           }
           await this.messagesService.handleIncomingMessage(
-            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile,
+            company.id,
+            customerPhone,
+            whatsappMessageId,
+            content,
+            type,
+            customerName,
+            mediaUrl,
+            chatId,
+            contactProfile,
           );
           continue;
         }
@@ -276,10 +304,21 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         // TIMEOUT_REDIRECT: tenta reatribuir silenciosamente
         if (conversation.flowState === 'TIMEOUT_REDIRECT') {
           if (conversation.departmentId) {
-            await this.departmentRoutingService.assignToAgent(conversation.id, conversation.departmentId);
+            await this.departmentRoutingService.assignToAgent(
+              conversation.id,
+              conversation.departmentId,
+            );
           }
           await this.messagesService.handleIncomingMessage(
-            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile,
+            company.id,
+            customerPhone,
+            whatsappMessageId,
+            content,
+            type,
+            customerName,
+            mediaUrl,
+            chatId,
+            contactProfile,
           );
           continue;
         }

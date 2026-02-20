@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'WPPConnector - WhatsApp Business Dashboard',
+  title: 'Veloce - WhatsApp Business Dashboard',
   description: 'Painel de atendimento WhatsApp Business',
 };
 

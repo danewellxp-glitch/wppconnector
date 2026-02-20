@@ -14,43 +14,43 @@ import { DepartmentRoutingService } from '../departments/department-routing.serv
 const MENU_ALIASES: Record<string, string> = {
   // Laboratório
   '1': 'laboratorio',
-  'lab': 'laboratorio',
-  'laboratorio': 'laboratorio',
-  'laudo': 'laboratorio',
-  'analise': 'laboratorio',
-  'qualidade': 'laboratorio',
-  'tecnico': 'laboratorio',
+  lab: 'laboratorio',
+  laboratorio: 'laboratorio',
+  laudo: 'laboratorio',
+  analise: 'laboratorio',
+  qualidade: 'laboratorio',
+  tecnico: 'laboratorio',
 
   // Comercial
   '2': 'comercial',
-  'comercial': 'comercial',
-  'vendas': 'comercial',
-  'venda': 'comercial',
-  'pedido': 'comercial',
-  'cotacao': 'comercial',
-  'compra': 'comercial',
-  'preco': 'comercial',
+  comercial: 'comercial',
+  vendas: 'comercial',
+  venda: 'comercial',
+  pedido: 'comercial',
+  cotacao: 'comercial',
+  compra: 'comercial',
+  preco: 'comercial',
 
   // Financeiro
   '3': 'financeiro',
-  'financeiro': 'financeiro',
-  'financ': 'financeiro',
-  'boleto': 'financeiro',
-  'nota': 'financeiro',
-  'nf': 'financeiro',
-  'pagamento': 'financeiro',
-  'fatura': 'financeiro',
-  'cobranca': 'financeiro',
+  financeiro: 'financeiro',
+  financ: 'financeiro',
+  boleto: 'financeiro',
+  nota: 'financeiro',
+  nf: 'financeiro',
+  pagamento: 'financeiro',
+  fatura: 'financeiro',
+  cobranca: 'financeiro',
 
   // Administrativo (root dept — fallback)
   '4': 'administrativo',
-  'adm': 'administrativo',
-  'admin': 'administrativo',
-  'administrativo': 'administrativo',
-  'rh': 'administrativo',
+  adm: 'administrativo',
+  admin: 'administrativo',
+  administrativo: 'administrativo',
+  rh: 'administrativo',
   'recursos humanos': 'administrativo',
-  'fornecedor': 'administrativo',
-  'geral': 'administrativo',
+  fornecedor: 'administrativo',
+  geral: 'administrativo',
 };
 
 function normalizeInput(input: string): string {
@@ -69,7 +69,7 @@ export class FlowEngineService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private departmentRoutingService: DepartmentRoutingService,
-  ) { }
+  ) {}
 
   processMenuChoice(input: string): string | null {
     const key = normalizeInput(input);
@@ -121,7 +121,9 @@ export class FlowEngineService {
   isBusinessHours(): boolean {
     const now = new Date();
     // Converter a hora atual do servidor para UTC-3 (Horário de Brasília) para segurança
-    const spTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const spTime = new Date(
+      now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }),
+    );
 
     const day = spTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     const hours = spTime.getHours();
@@ -139,10 +141,7 @@ export class FlowEngineService {
     return 'Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\nSua mensagem foi registrada e retornaremos o contato em nosso horário comercial. 🙏';
   }
 
-  async sendOutOfHoursMessage(conversation: {
-    id: string;
-    companyId: string;
-  }) {
+  async sendOutOfHoursMessage(conversation: { id: string; companyId: string }) {
     const fullConv = await this.prisma.conversation.findUnique({
       where: { id: conversation.id },
       include: { company: true },
@@ -229,9 +228,9 @@ export class FlowEngineService {
     const meta = (fullConv.metadata as any) || {};
     const sendTo = meta.chatId || fullConv.customerPhone;
 
-    const invalidText =
-      'Opção inválida. Por favor escolha 1, 2, 3 ou 4.';
-    const menuText = fullConv.company.greetingMessage?.trim() ||
+    const invalidText = 'Opção inválida. Por favor escolha 1, 2, 3 ou 4.';
+    const menuText =
+      fullConv.company.greetingMessage?.trim() ||
       this.getDefaultGreeting(fullConv.company.name);
 
     await this.whatsappService.sendTextMessage(

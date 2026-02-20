@@ -23,7 +23,10 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Patch('me/status')
-  setMyStatus(@CurrentUser() user: any, @Body() body: { status: 'ONLINE' | 'BUSY' | 'OFFLINE' }) {
+  setMyStatus(
+    @CurrentUser() user: any,
+    @Body() body: { status: 'ONLINE' | 'BUSY' | 'OFFLINE' },
+  ) {
     return this.usersService.setMyStatus(user.id, body.status);
   }
 

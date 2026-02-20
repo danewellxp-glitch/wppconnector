@@ -76,8 +76,7 @@ async function testAtributionWithTransaction() {
 
           const sorted = [...agents].sort(
             (a, b) =>
-              a._count.assignedConversations -
-              b._count.assignedConversations,
+              a._count.assignedConversations - b._count.assignedConversations,
           );
 
           await tx.conversation.update({
@@ -192,7 +191,8 @@ async function testInvalidStateAllOffline() {
     console.log(`   assignedUserId: ${result.assignedUserId}`);
 
     const valid =
-      result.flowState === 'DEPARTMENT_SELECTED' && result.assignedUserId === null;
+      result.flowState === 'DEPARTMENT_SELECTED' &&
+      result.assignedUserId === null;
 
     console.log(
       `\n${valid ? '✅ PASSAR' : '❌ FALHAR'}: Estado ${valid ? 'válido' : 'INVÁLIDO'}`,
@@ -306,7 +306,9 @@ async function testRedistribution() {
       final.assignedUserId !== null && final.assignedUserId !== agents[0].id;
 
     console.log(`📋 Resultado:`);
-    console.log(`   assignedUserId: ${final.assignedUserId?.substring(0, 8) || 'null'}`);
+    console.log(
+      `   assignedUserId: ${final.assignedUserId?.substring(0, 8) || 'null'}`,
+    );
     console.log(
       `\n${redistributed ? '✅ PASSAR' : '❌ FALHAR'}: ${redistributed ? 'Redistribuído OK' : 'NÃO redistribuído'}`,
     );
@@ -333,7 +335,10 @@ async function main() {
   const results: { name: string; passed: boolean }[] = [];
 
   const test1 = await testAtributionWithTransaction();
-  results.push({ name: 'Atribuição com transação Serializable', passed: test1 });
+  results.push({
+    name: 'Atribuição com transação Serializable',
+    passed: test1,
+  });
 
   const test2 = await testInvalidStateAllOffline();
   results.push({ name: 'Estado inválido (todos offline)', passed: test2 });
@@ -353,7 +358,9 @@ async function main() {
 
   const passCount = results.filter((r) => r.passed).length;
   console.log('║                                                   ║');
-  console.log(`║ Total: ${passCount}/${results.length} testes passaram${' '.repeat(passCount === 1 ? 28 : 29)}║`);
+  console.log(
+    `║ Total: ${passCount}/${results.length} testes passaram${' '.repeat(passCount === 1 ? 28 : 29)}║`,
+  );
   console.log('╚═══════════════════════════════════════════════════╝\n');
 
   await prisma.$disconnect();

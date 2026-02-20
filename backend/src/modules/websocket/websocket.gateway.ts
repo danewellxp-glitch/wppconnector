@@ -58,16 +58,14 @@ export class WebsocketGateway
         client.handshake.headers?.authorization?.replace('Bearer ', '');
 
       if (!token) {
-        this.logger.warn(`Conexão rejeitada - token não fornecido (${client.id})`);
+        this.logger.warn(
+          `Conexão rejeitada - token não fornecido (${client.id})`,
+        );
         client.disconnect();
         return;
       }
 
-      const payload = this.jwtService.verify(token) as {
-        sub: string;
-        companyId: string;
-        departmentId?: string;
-      };
+      const payload = this.jwtService.verify(token);
       client.data.userId = payload.sub;
       client.data.companyId = payload.companyId;
       client.data.departmentId = payload.departmentId ?? null;
@@ -113,13 +111,11 @@ export class WebsocketGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() conversationId: string,
   ) {
-    client
-      .to(`conversation:${conversationId}`)
-      .emit('user-typing', {
-        userId: client.data.userId,
-        conversationId,
-        isTyping: true,
-      });
+    client.to(`conversation:${conversationId}`).emit('user-typing', {
+      userId: client.data.userId,
+      conversationId,
+      isTyping: true,
+    });
   }
 
   @SubscribeMessage('typing-stop')
@@ -127,13 +123,11 @@ export class WebsocketGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() conversationId: string,
   ) {
-    client
-      .to(`conversation:${conversationId}`)
-      .emit('user-typing', {
-        userId: client.data.userId,
-        conversationId,
-        isTyping: false,
-      });
+    client.to(`conversation:${conversationId}`).emit('user-typing', {
+      userId: client.data.userId,
+      conversationId,
+      isTyping: false,
+    });
   }
 
   @SubscribeMessage('agent-online')
@@ -150,7 +144,9 @@ export class WebsocketGateway
     if (userId) {
       await this.agentStatusService.setStatus(userId, 'OFFLINE');
       // Lazy load DepartmentRoutingService to avoid circular dependency
-      const routingService = this.moduleRef.get(DepartmentRoutingService, { strict: false });
+      const routingService = this.moduleRef.get(DepartmentRoutingService, {
+        strict: false,
+      });
       if (routingService) {
         await routingService.redistributeOnAgentOffline(userId);
       }

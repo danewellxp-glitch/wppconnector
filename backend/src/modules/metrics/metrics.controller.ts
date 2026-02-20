@@ -9,10 +9,7 @@ export class MetricsController {
   constructor(private metricsService: MetricsService) {}
 
   @Get('dashboard')
-  getDashboard(
-    @CurrentUser() user: any,
-    @Query('period') period?: string,
-  ) {
+  getDashboard(@CurrentUser() user: any, @Query('period') period?: string) {
     return this.metricsService.getDashboard(user.companyId, period);
   }
 
@@ -25,10 +22,7 @@ export class MetricsController {
   }
 
   @Get('agents')
-  getAgentMetrics(
-    @CurrentUser() user: any,
-    @Query('period') period?: string,
-  ) {
+  getAgentMetrics(@CurrentUser() user: any, @Query('period') period?: string) {
     return this.metricsService.getAgentMetrics(user.companyId, period);
   }
 }

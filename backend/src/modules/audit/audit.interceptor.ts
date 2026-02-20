@@ -38,8 +38,7 @@ export class AuditInterceptor implements NestInterceptor {
       tap((responseData) => {
         const entity = this.resolveEntity(path);
         const action = this.resolveAction(method, path);
-        const entityId =
-          request.params?.id || responseData?.id || undefined;
+        const entityId = request.params?.id || responseData?.id || undefined;
 
         if (user?.companyId) {
           this.auditService

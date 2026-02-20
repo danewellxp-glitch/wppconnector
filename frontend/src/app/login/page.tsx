@@ -27,7 +27,7 @@ export default function LoginPage() {
             Atendimento
           </h2>
           <p className="text-lg text-indigo-200 max-w-md leading-relaxed">
-            Painel de comunicação corporativa. Conectando a excelência certificada da Sim Estearina com a eficiência do WPPConnector.
+            Sua comunicação corporativa em um novo ritmo. Integrando o padrão de qualidade Sim Estearina com a inteligência em tempo real do sistema Veloce.
           </p>
         </div>
       </div>

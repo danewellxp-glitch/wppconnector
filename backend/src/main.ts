@@ -9,7 +9,8 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const uploadsPath = join(process.cwd(), 'uploads');
-  if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
+  if (!fs.existsSync(uploadsPath))
+    fs.mkdirSync(uploadsPath, { recursive: true });
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: {
@@ -53,6 +54,9 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
 
   Logger.log(`Backend rodando em http://192.168.10.156:${port}`, 'Bootstrap');
-  Logger.log(`API disponivel em http://192.168.10.156:${port}/api`, 'Bootstrap');
+  Logger.log(
+    `API disponivel em http://192.168.10.156:${port}/api`,
+    'Bootstrap',
+  );
 }
 bootstrap();

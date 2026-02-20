@@ -43,7 +43,9 @@ export class NotificationsService {
   notifyNewConversation(payload: NewConversationPayload) {
     const gateway = this.getWebsocketGateway();
     if (!gateway) {
-      this.logger.warn('WebsocketGateway not available for new conversation notification');
+      this.logger.warn(
+        'WebsocketGateway not available for new conversation notification',
+      );
       return;
     }
 
@@ -66,7 +68,9 @@ export class NotificationsService {
   notifyConversationTransferred(payload: ConversationTransferredPayload) {
     const gateway = this.getWebsocketGateway();
     if (!gateway) {
-      this.logger.warn('WebsocketGateway not available for conversation transferred notification');
+      this.logger.warn(
+        'WebsocketGateway not available for conversation transferred notification',
+      );
       return;
     }
 
@@ -74,15 +78,19 @@ export class NotificationsService {
       `🔄 Notificando departamento ${payload.toDepartmentId} sobre transferência de conversa de ${payload.customerName} do departamento ${payload.fromDepartmentName}`,
     );
 
-    gateway.emitToDepartment(payload.toDepartmentId, 'conversation_transferred', {
-      conversationId: payload.conversationId,
-      customerName: payload.customerName,
-      customerPhone: payload.customerPhone,
-      transferredBy: payload.transferredBy,
-      fromDepartmentName: payload.fromDepartmentName,
-      toDepartmentName: payload.toDepartmentName,
-      timestamp: payload.timestamp,
-    });
+    gateway.emitToDepartment(
+      payload.toDepartmentId,
+      'conversation_transferred',
+      {
+        conversationId: payload.conversationId,
+        customerName: payload.customerName,
+        customerPhone: payload.customerPhone,
+        transferredBy: payload.transferredBy,
+        fromDepartmentName: payload.fromDepartmentName,
+        toDepartmentName: payload.toDepartmentName,
+        timestamp: payload.timestamp,
+      },
+    );
   }
 
   /**

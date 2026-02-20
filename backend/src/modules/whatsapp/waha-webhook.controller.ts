@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Post,
-  Body,
-  HttpCode,
-  Logger,
-} from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, Logger } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MessagesService } from '../messages/messages.service';
@@ -25,7 +19,7 @@ export class WahaWebhookController {
     private flowEngineService: FlowEngineService,
     private departmentRoutingService: DepartmentRoutingService,
     private conversationRoutingService: ConversationRoutingService,
-  ) { }
+  ) {}
 
   @Post()
   @HttpCode(200)
@@ -146,7 +140,9 @@ export class WahaWebhookController {
 
     // If conversation was RESOLVED, reopen it and restart the bot flow
     if (conversation.status === 'RESOLVED') {
-      this.logger.log(`[FLOW] Conversation RESOLVED — reopening and restarting bot for ${customerPhone}`);
+      this.logger.log(
+        `[FLOW] Conversation RESOLVED — reopening and restarting bot for ${customerPhone}`,
+      );
       conversation = await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -166,12 +162,15 @@ export class WahaWebhookController {
     if (conversation.flowState === 'GREETING') {
       if (!conversation.greetingSentAt) {
         // First message: check for previous attendance and suggest routing
-        this.logger.log(`[FLOW] Checking for previous attendance for ${customerPhone}`);
-        const hasSuggestion = await this.conversationRoutingService.checkAndSuggestPreviousRouting(
-          conversation.id,
-          customerPhone,
-          company.id,
+        this.logger.log(
+          `[FLOW] Checking for previous attendance for ${customerPhone}`,
         );
+        const hasSuggestion =
+          await this.conversationRoutingService.checkAndSuggestPreviousRouting(
+            conversation.id,
+            customerPhone,
+            company.id,
+          );
 
         if (hasSuggestion) {
           // Conversa em estado AWAITING_ROUTING_CONFIRMATION, aguardando resposta
@@ -180,11 +179,16 @@ export class WahaWebhookController {
 
         // Sem sugestão anterior: verificar horário comercial
         if (!this.flowEngineService.isBusinessHours()) {
-          this.logger.log(`[FLOW] Out of hours for ${customerPhone}. Sending offline message...`);
+          this.logger.log(
+            `[FLOW] Out of hours for ${customerPhone}. Sending offline message...`,
+          );
           await this.flowEngineService.sendOutOfHoursMessage(conversation);
 
           // Route immediately to Admin so it stays in the queue for the next business day
-          const adminDept = await this.flowEngineService.resolveDepartmentSlug(company.id, 'administrativo');
+          const adminDept = await this.flowEngineService.resolveDepartmentSlug(
+            company.id,
+            'administrativo',
+          );
           if (adminDept) {
             await this.departmentRoutingService.routeToDepartment(
               conversation.id,
@@ -207,23 +211,30 @@ export class WahaWebhookController {
         const slugHint = this.flowEngineService.processMenuChoice(body);
         if (slugHint) {
           // Resolve slug to actual department for this company (with root fallback)
-          const resolvedDept = await this.flowEngineService.resolveDepartmentSlug(
-            company.id,
-            slugHint,
-          );
+          const resolvedDept =
+            await this.flowEngineService.resolveDepartmentSlug(
+              company.id,
+              slugHint,
+            );
           if (resolvedDept) {
-            this.logger.log(`[FLOW] Routing ${customerPhone} to department: ${resolvedDept.name} (${resolvedDept.slug})`);
+            this.logger.log(
+              `[FLOW] Routing ${customerPhone} to department: ${resolvedDept.name} (${resolvedDept.slug})`,
+            );
             await this.departmentRoutingService.routeToDepartment(
               conversation.id,
               resolvedDept.slug,
               company.id,
             );
           } else {
-            this.logger.warn(`[FLOW] No department resolved for slug '${slugHint}' in company ${company.id} `);
+            this.logger.warn(
+              `[FLOW] No department resolved for slug '${slugHint}' in company ${company.id} `,
+            );
             await this.flowEngineService.handleInvalidChoice(conversation);
           }
         } else {
-          this.logger.log(`[FLOW] Invalid choice from ${customerPhone}: "${body}"`);
+          this.logger.log(
+            `[FLOW] Invalid choice from ${customerPhone}: "${body}"`,
+          );
           await this.flowEngineService.handleInvalidChoice(conversation);
         }
       }
@@ -246,12 +257,15 @@ export class WahaWebhookController {
     // 🔄 Handle intelligent routing suggestion response
     if (conversation.flowState === 'AWAITING_ROUTING_CONFIRMATION') {
       const body = (content || '').trim();
-      this.logger.log(`[ROUTING] Processing routing suggestion response: "${body}"`);
-
-      const result = await this.conversationRoutingService.handleRoutingSuggestionResponse(
-        conversation.id,
-        body,
+      this.logger.log(
+        `[ROUTING] Processing routing suggestion response: "${body}"`,
       );
+
+      const result =
+        await this.conversationRoutingService.handleRoutingSuggestionResponse(
+          conversation.id,
+          body,
+        );
 
       if (result.accepted && result.departmentId) {
         // Cliente aceitou sugestão de retorno
@@ -295,7 +309,9 @@ export class WahaWebhookController {
 
     // 🔄 Handle TIMEOUT_REDIRECT: cliente aguardando agente, tenta reatribuir silenciosamente
     if (conversation.flowState === 'TIMEOUT_REDIRECT') {
-      this.logger.log(`[FLOW] TIMEOUT_REDIRECT: tentando reatribuir conversa ${conversation.id} `);
+      this.logger.log(
+        `[FLOW] TIMEOUT_REDIRECT: tentando reatribuir conversa ${conversation.id} `,
+      );
 
       if (conversation.departmentId) {
         const dept = await this.prisma.department.findUnique({
@@ -308,16 +324,22 @@ export class WahaWebhookController {
         );
 
         if (agent) {
-          this.logger.log(`[FLOW] Agente ${agent.name} disponível agora, atribuindo conversa ${conversation.id} `);
+          this.logger.log(
+            `[FLOW] Agente ${agent.name} disponível agora, atribuindo conversa ${conversation.id} `,
+          );
           // Notificar cliente que um agente está disponível (sem reenviar o menu)
           const deptName = dept?.name || 'Atendimento';
-          const sendTo = (conversation.metadata as any)?.chatId || conversation.customerPhone;
-          await this.whatsappService.sendTextMessage(
-            company.whatsappAccessToken,
-            company.whatsappPhoneNumberId,
-            sendTo,
-            `✅ Um atendente do setor * ${deptName} * está disponível!\n\nConectando com * ${agent.name}*... 😊`,
-          ).catch(() => { });
+          const sendTo =
+            (conversation.metadata as any)?.chatId ||
+            conversation.customerPhone;
+          await this.whatsappService
+            .sendTextMessage(
+              company.whatsappAccessToken,
+              company.whatsappPhoneNumberId,
+              sendTo,
+              `✅ Um atendente do setor * ${deptName} * está disponível!\n\nConectando com * ${agent.name}*... 😊`,
+            )
+            .catch(() => {});
         }
         // Se ainda sem agentes: salva a mensagem silenciosamente, sem reenviar "indisponíveis"
       }
@@ -340,7 +362,7 @@ export class WahaWebhookController {
           company.whatsappPhoneNumberId,
           whatsappMessageId,
         )
-        .catch(() => { });
+        .catch(() => {});
       return;
     }
 
@@ -364,7 +386,7 @@ export class WahaWebhookController {
         company.whatsappPhoneNumberId,
         whatsappMessageId,
       )
-      .catch(() => { });
+      .catch(() => {});
   }
 
   private async handleStatusUpdate(payload: any) {

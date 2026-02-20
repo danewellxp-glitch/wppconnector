@@ -10,9 +10,9 @@ export function UnreadTitleManager() {
         const totalUnread = conversations.reduce((acc, conv) => acc + (conv.unreadCount || 0), 0);
 
         if (totalUnread > 0) {
-            document.title = `(${totalUnread}) WPPConnector`;
+            document.title = `(${totalUnread}) Veloce`;
         } else {
-            document.title = 'WPPConnector';
+            document.title = 'Veloce';
         }
     }, [conversations]);
 

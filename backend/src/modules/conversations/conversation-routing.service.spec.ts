@@ -101,9 +101,9 @@ describe('ConversationRoutingService', () => {
     });
 
     it('deve rejeitar respostas negativas', async () => {
-      mockPrisma.conversation.findUnique = jest.fn().mockResolvedValue(
-        mockConversation,
-      );
+      mockPrisma.conversation.findUnique = jest
+        .fn()
+        .mockResolvedValue(mockConversation);
 
       const result = await service.handleRoutingSuggestionResponse(
         'conv-123',
@@ -114,9 +114,9 @@ describe('ConversationRoutingService', () => {
     });
 
     it('deve retornar false para respostas inválidas', async () => {
-      mockPrisma.conversation.findUnique = jest.fn().mockResolvedValue(
-        mockConversation,
-      );
+      mockPrisma.conversation.findUnique = jest
+        .fn()
+        .mockResolvedValue(mockConversation);
 
       const result = await service.handleRoutingSuggestionResponse(
         'conv-123',

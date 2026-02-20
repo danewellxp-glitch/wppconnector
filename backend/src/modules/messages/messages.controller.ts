@@ -41,11 +41,16 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
 export class MessagesController {
-  constructor(private messagesService: MessagesService) { }
+  constructor(private messagesService: MessagesService) {}
 
   @Post('send')
   send(@CurrentUser() user: any, @Body() dto: SendMessageDto) {
-    return this.messagesService.sendMessage(user.id, user.companyId, dto, user.name);
+    return this.messagesService.sendMessage(
+      user.id,
+      user.companyId,
+      dto,
+      user.name,
+    );
   }
 
   @Post('send-media')
@@ -57,12 +62,38 @@ export class MessagesController {
     @Body('caption') caption?: string,
   ) {
     if (!file) throw new BadRequestException('Arquivo obrigatorio');
-    if (!conversationId) throw new BadRequestException('conversationId obrigatorio');
+    if (!conversationId)
+      throw new BadRequestException('conversationId obrigatorio');
     const ext = file.originalname.split('.').pop()?.toLowerCase();
-    const VALID_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'md', 'mp3', 'ogg', 'wav', 'webm'];
+    const VALID_EXTS = [
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+      'pdf',
+      'doc',
+      'docx',
+      'xls',
+      'xlsx',
+      'ppt',
+      'pptx',
+      'txt',
+      'csv',
+      'md',
+      'mp3',
+      'ogg',
+      'wav',
+      'webm',
+    ];
 
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype) && !VALID_EXTS.includes(ext || '')) {
-      throw new BadRequestException('Tipo de arquivo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.');
+    if (
+      !ALLOWED_MIME_TYPES.includes(file.mimetype) &&
+      !VALID_EXTS.includes(ext || '')
+    ) {
+      throw new BadRequestException(
+        'Tipo de arquivo nao permitido. Use formatos de imagem, áudio, PDF, Office ou Texto.',
+      );
     }
     if (file.size > MAX_SIZE) {
       throw new BadRequestException('Arquivo muito grande. Limite: 10 MB.');

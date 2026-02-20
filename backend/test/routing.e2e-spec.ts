@@ -26,8 +26,8 @@ describe('🧪 Roteamento Automático de Departamentos (E2E)', () => {
   let messages: MessagesService;
 
   let company: any;
-  let departments: Record<string, any> = {};
-  let agents: Record<string, any> = {};
+  const departments: Record<string, any> = {};
+  const agents: Record<string, any> = {};
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -187,7 +187,9 @@ describe('🧪 Roteamento Automático de Departamentos (E2E)', () => {
       expect(routed?.department?.slug).toBe('laboratorio');
       expect(routed?.flowState).toBe('ASSIGNED');
       expect(routed?.assignedUser).toBeDefined();
-      expect(routed?.assignedUser?.departmentId).toBe(departments.laboratorio.id);
+      expect(routed?.assignedUser?.departmentId).toBe(
+        departments.laboratorio.id,
+      );
     });
 
     it('deve rotear para Administrativo corretamente', async () => {
@@ -288,11 +290,7 @@ describe('🧪 Roteamento Automático de Departamentos (E2E)', () => {
         },
       });
 
-      await routing.routeToDepartment(
-        conversation.id,
-        'comercial',
-        company.id,
-      );
+      await routing.routeToDepartment(conversation.id, 'comercial', company.id);
 
       const routed = await prisma.conversation.findUnique({
         where: { id: conversation.id },
@@ -344,11 +342,7 @@ describe('🧪 Roteamento Automático de Departamentos (E2E)', () => {
         },
       });
 
-      await routing.routeToDepartment(
-        newConv.id,
-        'laboratorio',
-        company.id,
-      );
+      await routing.routeToDepartment(newConv.id, 'laboratorio', company.id);
 
       const assigned = await prisma.conversation.findUnique({
         where: { id: newConv.id },
@@ -404,11 +398,7 @@ describe('🧪 Roteamento Automático de Departamentos (E2E)', () => {
       expect(detected).toBe('comercial');
 
       // 5. Rotear para departamento
-      await routing.routeToDepartment(
-        conversation.id,
-        'comercial',
-        company.id,
-      );
+      await routing.routeToDepartment(conversation.id, 'comercial', company.id);
 
       // 6. Verificar estado final
       const final = await prisma.conversation.findUnique({

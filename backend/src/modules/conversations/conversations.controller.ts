@@ -21,7 +21,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @Controller('conversations')
 @UseGuards(JwtAuthGuard)
 export class ConversationsController {
-  constructor(private conversationsService: ConversationsService) { }
+  constructor(private conversationsService: ConversationsService) {}
 
   @Get()
   findAll(
@@ -81,10 +81,7 @@ export class ConversationsController {
   }
 
   @Post(':id/resolve')
-  resolve(
-    @Param('id') id: string,
-    @Body() body: { sendMessage?: boolean },
-  ) {
+  resolve(@Param('id') id: string, @Body() body: { sendMessage?: boolean }) {
     return this.conversationsService.resolve(id, body?.sendMessage !== false);
   }
 
@@ -117,7 +114,12 @@ export class ConversationsController {
     @Body('content') content: string,
     @CurrentUser() user: any,
   ) {
-    return this.conversationsService.createNote(id, user.id, user.companyId, content);
+    return this.conversationsService.createNote(
+      id,
+      user.id,
+      user.companyId,
+      content,
+    );
   }
 
   @Patch(':id/notes/:noteId')
@@ -127,7 +129,12 @@ export class ConversationsController {
     @Body('content') content: string,
     @CurrentUser() user: any,
   ) {
-    return this.conversationsService.updateNote(noteId, content, user.id, user.role);
+    return this.conversationsService.updateNote(
+      noteId,
+      content,
+      user.id,
+      user.role,
+    );
   }
 
   @Delete(':id/notes/:noteId')

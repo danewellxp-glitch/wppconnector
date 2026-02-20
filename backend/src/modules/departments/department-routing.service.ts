@@ -14,7 +14,7 @@ export class DepartmentRoutingService {
     private prisma: PrismaService,
     private moduleRef: ModuleRef,
     private notificationsService: NotificationsService,
-  ) { }
+  ) {}
 
   private getWebsocketGateway(): WebsocketGateway | null {
     try {
@@ -41,7 +41,9 @@ export class DepartmentRoutingService {
       where: { companyId, slug, isActive: true },
     });
     if (!dept) {
-      this.logger.warn(`Department not found: ${slug} for company ${companyId}`);
+      this.logger.warn(
+        `Department not found: ${slug} for company ${companyId}`,
+      );
       return null;
     }
 
@@ -175,9 +177,7 @@ export class DepartmentRoutingService {
           });
         } catch (err) {
           // tabela pode não existir ainda, não bloquear o fluxo
-          this.logger.warn(
-            `[ASSIGNMENT] Falha ao criar registro: ${err}`,
-          );
+          this.logger.warn(`[ASSIGNMENT] Falha ao criar registro: ${err}`);
         }
 
         return {
@@ -210,8 +210,7 @@ export class DepartmentRoutingService {
       },
     });
     agents.sort(
-      (a, b) =>
-        a._count.assignedConversations - b._count.assignedConversations,
+      (a, b) => a._count.assignedConversations - b._count.assignedConversations,
     );
     return agents.map((a) => ({ id: a.id, name: a.name }));
   }
@@ -231,7 +230,11 @@ export class DepartmentRoutingService {
       );
       await this.prisma.conversation.update({
         where: { id: conv.id },
-        data: { flowState: 'DEPARTMENT_SELECTED', status: 'OPEN', timeoutAt: null },
+        data: {
+          flowState: 'DEPARTMENT_SELECTED',
+          status: 'OPEN',
+          timeoutAt: null,
+        },
       });
       if (conv.departmentId) {
         await this.assignToAgent(conv.id, conv.departmentId);
@@ -258,11 +261,7 @@ export class DepartmentRoutingService {
     );
 
     for (const conv of timedOut) {
-      await this.redirectToAdmin(
-        conv.id,
-        conv.companyId,
-        'timeout',
-      );
+      await this.redirectToAdmin(conv.id, conv.companyId, 'timeout');
     }
   }
 
@@ -279,7 +278,7 @@ export class DepartmentRoutingService {
 
     this.logger.log(
       `[REDISTRIBUTE] Agente ${userId} offline. ` +
-      `Redistribuindo ${conversations.length} conversa(s)...`,
+        `Redistribuindo ${conversations.length} conversa(s)...`,
     );
 
     for (const conv of conversations) {
@@ -296,16 +295,11 @@ export class DepartmentRoutingService {
 
       // 2. tentar reatribuir para outro agente do mesmo setor
       if (!conv.departmentId) {
-        this.logger.warn(
-          `[REDISTRIBUTE] Conversa ${conv.id} sem departmentId`,
-        );
+        this.logger.warn(`[REDISTRIBUTE] Conversa ${conv.id} sem departmentId`);
         continue;
       }
 
-      const newAgent = await this.assignToAgent(
-        conv.id,
-        conv.departmentId,
-      );
+      const newAgent = await this.assignToAgent(conv.id, conv.departmentId);
 
       if (newAgent) {
         this.logger.log(
@@ -313,7 +307,10 @@ export class DepartmentRoutingService {
         );
         const gateway = this.getWebsocketGateway();
         if (gateway) {
-          const convUpdated = await this.prisma.conversation.findUnique({ where: { id: conv.id }, include: { department: true } });
+          const convUpdated = await this.prisma.conversation.findUnique({
+            where: { id: conv.id },
+            include: { department: true },
+          });
           gateway.emitToUser(newAgent.id, 'conversation-assigned', {
             conversationId: conv.id,
             conversation: convUpdated,
@@ -327,14 +324,10 @@ export class DepartmentRoutingService {
         );
         const gateway = this.getWebsocketGateway();
         if (gateway) {
-          gateway.emitToDepartment(
-            conv.departmentId,
-            'conversation-queued',
-            {
-              conversationId: conv.id,
-              reason: 'agent_offline',
-            },
-          );
+          gateway.emitToDepartment(conv.departmentId, 'conversation-queued', {
+            conversationId: conv.id,
+            reason: 'agent_offline',
+          });
         }
       }
     }
@@ -406,24 +399,21 @@ export class DepartmentRoutingService {
       });
     }
 
-    const adminAgent = await this.assignToAgent(
-      conversationId,
-      adminDept.id,
-    );
+    const adminAgent = await this.assignToAgent(conversationId, adminDept.id);
 
     if (adminAgent) {
       if (gateway) {
-        const convUpdated = await this.prisma.conversation.findUnique({ where: { id: conversationId }, include: { department: true } });
+        const convUpdated = await this.prisma.conversation.findUnique({
+          where: { id: conversationId },
+          include: { department: true },
+        });
         gateway.emitToUser(adminAgent.id, 'conversation-assigned', {
           conversationId,
           conversation: convUpdated,
           agentName: adminAgent.name,
         });
       }
-      await this.sendWhatsAppToConversation(
-        conversationId,
-        messages[reason],
-      );
+      await this.sendWhatsAppToConversation(conversationId, messages[reason]);
     } else {
       // todos offline — manter a conversa na fila do Administrativo para que
       // os atendentes vejam a conversa pendente quando voltarem a ficar online.

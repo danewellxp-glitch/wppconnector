@@ -20,7 +20,7 @@ export function Header() {
     <header className="flex h-14 items-center justify-between border-b bg-white px-6">
       <div className="flex items-center gap-3">
         <MessageSquare className="h-5 w-5 text-green-600" />
-        <span className="font-semibold">WPPConnector Dashboard</span>
+        <span className="font-semibold">Veloce Dashboard</span>
       </div>
 
       <div className="flex items-center gap-4">

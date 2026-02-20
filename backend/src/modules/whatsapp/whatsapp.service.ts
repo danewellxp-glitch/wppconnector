@@ -12,10 +12,14 @@ export class WhatsappService {
   private readonly wahaSession: string;
 
   constructor(private configService: ConfigService) {
-    this.provider = this.configService.get<string>('WHATSAPP_PROVIDER') || 'META';
-    this.wahaApiUrl = this.configService.get<string>('WAHA_API_URL') || 'http://192.168.10.156:3101';
+    this.provider =
+      this.configService.get<string>('WHATSAPP_PROVIDER') || 'META';
+    this.wahaApiUrl =
+      this.configService.get<string>('WAHA_API_URL') ||
+      'http://192.168.10.156:3101';
     this.wahaApiKey = this.configService.get<string>('WAHA_API_KEY') || '';
-    this.wahaSession = this.configService.get<string>('WAHA_SESSION') || 'default';
+    this.wahaSession =
+      this.configService.get<string>('WAHA_SESSION') || 'default';
     this.logger.log(`WhatsApp provider: ${this.provider}`);
   }
 
@@ -82,9 +86,7 @@ export class WhatsappService {
    * Resolve a WAHA chatId (LID or @c.us) to real contact info.
    * Returns null if resolution fails.
    */
-  async getContactInfo(
-    contactId: string,
-  ): Promise<{
+  async getContactInfo(contactId: string): Promise<{
     number: string;
     pushname: string | null;
     name: string | null;
@@ -195,7 +197,10 @@ export class WhatsappService {
       const messageId =
         typeof rawId === 'string'
           ? rawId
-          : rawId?._serialized || rawId?.id || data?.key?.id || `waha_${Date.now()}`;
+          : rawId?._serialized ||
+            rawId?.id ||
+            data?.key?.id ||
+            `waha_${Date.now()}`;
       return { messages: [{ id: messageId }] };
     } catch (error: any) {
       this.logger.error(
@@ -224,7 +229,10 @@ export class WhatsappService {
       const messageId =
         typeof rawId === 'string'
           ? rawId
-          : rawId?._serialized || rawId?.id || data?.key?.id || `waha_${Date.now()}`;
+          : rawId?._serialized ||
+            rawId?.id ||
+            data?.key?.id ||
+            `waha_${Date.now()}`;
 
       return { messages: [{ id: messageId }] };
     } catch (error: any) {

@@ -85,15 +85,18 @@ export class DepartmentsService {
     });
   }
 
-  async create(companyId: string, data: {
-    name: string;
-    slug: string;
-    description?: string;
-    color?: string;
-    isRoot?: boolean;
-    responseTimeoutMinutes?: number;
-    maxAgents?: number;
-  }) {
+  async create(
+    companyId: string,
+    data: {
+      name: string;
+      slug: string;
+      description?: string;
+      color?: string;
+      isRoot?: boolean;
+      responseTimeoutMinutes?: number;
+      maxAgents?: number;
+    },
+  ) {
     return this.prisma.department.create({
       data: {
         companyId,
@@ -108,16 +111,20 @@ export class DepartmentsService {
     });
   }
 
-  async update(id: string, companyId: string, data: Partial<{
-    name: string;
-    slug: string;
-    description: string | null;
-    color: string;
-    isRoot: boolean;
-    isActive: boolean;
-    responseTimeoutMinutes: number;
-    maxAgents: number;
-  }>) {
+  async update(
+    id: string,
+    companyId: string,
+    data: Partial<{
+      name: string;
+      slug: string;
+      description: string | null;
+      color: string;
+      isRoot: boolean;
+      isActive: boolean;
+      responseTimeoutMinutes: number;
+      maxAgents: number;
+    }>,
+  ) {
     await this.findOne(id, companyId);
     return this.prisma.department.update({
       where: { id },

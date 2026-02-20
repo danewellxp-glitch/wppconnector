@@ -1,7 +1,16 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { ConversationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { WebsocketGateway } from '../websocket/websocket.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ConversationsService {
@@ -10,7 +19,24 @@ export class ConversationsService {
   constructor(
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
-  ) { }
+    private moduleRef: ModuleRef,
+  ) {}
+
+  private getWebsocketGateway(): WebsocketGateway | null {
+    try {
+      return this.moduleRef.get(WebsocketGateway, { strict: false });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private getNotificationsService(): NotificationsService | null {
+    try {
+      return this.moduleRef.get(NotificationsService, { strict: false });
+    } catch (error) {
+      return null;
+    }
+  }
 
   async findAll(
     companyId: string,
@@ -25,7 +51,7 @@ export class ConversationsService {
       });
 
       if (rootDept) {
-        // Agent can see: 
+        // Agent can see:
         // 1) Conversations in their own department
         // 2) Conversations in the Root department that are unassigned (Offline Queue)
         where.OR = [
@@ -33,8 +59,8 @@ export class ConversationsService {
           {
             departmentId: rootDept.id,
             assignedUserId: null,
-            status: 'OPEN' // Only pending offline queue
-          }
+            status: 'OPEN', // Only pending offline queue
+          },
         ];
       } else {
         where.departmentId = user.departmentId;
@@ -43,7 +69,9 @@ export class ConversationsService {
     return this.prisma.conversation.findMany({
       where,
       include: {
-        department: { select: { id: true, name: true, slug: true, color: true } },
+        department: {
+          select: { id: true, name: true, slug: true, color: true },
+        },
         assignedUser: { select: { id: true, name: true, email: true } },
         assignments: {
           where: { unassignedAt: null },
@@ -69,11 +97,16 @@ export class ConversationsService {
     });
   }
 
-  async findOne(id: string, user?: { role: string; departmentId?: string | null }) {
+  async findOne(
+    id: string,
+    user?: { role: string; departmentId?: string | null },
+  ) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: {
-        department: { select: { id: true, name: true, slug: true, color: true } },
+        department: {
+          select: { id: true, name: true, slug: true, color: true },
+        },
         assignedUser: { select: { id: true, name: true, email: true } },
         assignments: {
           where: { unassignedAt: null },
@@ -141,7 +174,10 @@ export class ConversationsService {
       where: { id: userId },
       select: { departmentId: true },
     });
-    if (!agent || (conv.departmentId && agent.departmentId !== conv.departmentId)) {
+    if (
+      !agent ||
+      (conv.departmentId && agent.departmentId !== conv.departmentId)
+    ) {
       throw new ForbiddenException('Usuario nao pertence ao setor da conversa');
     }
 
@@ -189,10 +225,14 @@ export class ConversationsService {
     conversationId: string,
     departmentId: string,
     userId?: string,
-    currentUser: { companyId: string; role: string } = { companyId: '', role: 'AGENT' },
+    currentUser: { companyId: string; role: string; name?: string } = {
+      companyId: '',
+      role: 'AGENT',
+    },
   ) {
     const conv = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
+      include: { department: true },
     });
     if (!conv || conv.companyId !== currentUser.companyId) {
       throw new NotFoundException('Conversa nao encontrada');
@@ -202,6 +242,12 @@ export class ConversationsService {
     });
     if (!dept) throw new NotFoundException('Departamento nao encontrado');
 
+    // Close any previous assignments
+    await this.prisma.assignment.updateMany({
+      where: { conversationId, unassignedAt: null },
+      data: { unassignedAt: new Date() },
+    });
+
     const updateData: any = {
       departmentId,
       assignedUserId: null,
@@ -210,19 +256,25 @@ export class ConversationsService {
       routedAt: new Date(),
       timeoutAt: new Date(Date.now() + dept.responseTimeoutMinutes * 60 * 1000),
     };
+
     if (userId) {
       const agent = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { departmentId: true },
+        select: { departmentId: true, name: true },
       });
       if (agent?.departmentId === departmentId) {
         updateData.assignedUserId = userId;
         updateData.assignedAt = new Date();
         updateData.flowState = 'ASSIGNED';
         updateData.timeoutAt = null;
+
+        await this.prisma.assignment.create({
+          data: { conversationId, userId },
+        });
       }
     }
-    return this.prisma.conversation.update({
+
+    const updated = await this.prisma.conversation.update({
       where: { id: conversationId },
       data: updateData,
       include: {
@@ -230,6 +282,39 @@ export class ConversationsService {
         assignedUser: { select: { id: true, name: true, email: true } },
       },
     });
+
+    const notifService = this.getNotificationsService();
+    if (notifService) {
+      notifService.notifyConversationTransferred({
+        conversationId,
+        customerName: conv.customerName || 'Cliente',
+        customerPhone: conv.customerPhone,
+        transferredBy: currentUser.name || 'Agente',
+        fromDepartmentId: conv.departmentId || '',
+        fromDepartmentName: conv.department?.name || 'Desconhecido',
+        toDepartmentId: dept.id,
+        toDepartmentName: dept.name,
+        timestamp: new Date(),
+      });
+    }
+
+    const gateway = this.getWebsocketGateway();
+    if (gateway) {
+      gateway.emitToDepartment(dept.id, 'conversation-queued', {
+        conversationId,
+        reason: 'transfer',
+      });
+
+      if (updateData.assignedUserId) {
+        gateway.emitToUser(updateData.assignedUserId, 'conversation-assigned', {
+          conversationId,
+          conversation: updated,
+          agentName: updated.assignedUser?.name,
+        });
+      }
+    }
+
+    return updated;
   }
 
   async updateStatus(conversationId: string, status: ConversationStatus) {
@@ -243,10 +328,7 @@ export class ConversationsService {
    * Resolve a conversation and fully reset its state so the bot restarts
    * from the beginning when the client contacts again.
    */
-  async resolve(
-    conversationId: string,
-    sendClosingMessage = true,
-  ) {
+  async resolve(conversationId: string, sendClosingMessage = true) {
     const conv = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { company: true },
@@ -257,10 +339,9 @@ export class ConversationsService {
     if (sendClosingMessage) {
       try {
         const to = (conv.metadata as any)?.chatId || conv.customerPhone;
-        const closingText =
-          conv.company.greetingMessage
-            ? `Atendimento encerrado. Obrigado por entrar em contato! 😊`
-            : `Atendimento encerrado. Obrigado por entrar em contato! 😊\n\nSe precisar de mais ajuda, é só nos chamar novamente.`;
+        const closingText = conv.company.greetingMessage
+          ? `Atendimento encerrado. Obrigado por entrar em contato! 😊`
+          : `Atendimento encerrado. Obrigado por entrar em contato! 😊\n\nSe precisar de mais ajuda, é só nos chamar novamente.`;
         await this.whatsappService.sendTextMessage(
           conv.company.whatsappAccessToken,
           conv.company.whatsappPhoneNumberId,
@@ -268,7 +349,9 @@ export class ConversationsService {
           closingText,
         );
       } catch (err: any) {
-        this.logger.warn(`[RESOLVE] Falha ao enviar mensagem de encerramento: ${err.message}`);
+        this.logger.warn(
+          `[RESOLVE] Falha ao enviar mensagem de encerramento: ${err.message}`,
+        );
       }
     }
 
@@ -328,19 +411,30 @@ export class ConversationsService {
     companyId: string,
     content: string,
   ) {
-    if (!content?.trim()) throw new BadRequestException('Conteudo da nota nao pode ser vazio');
+    if (!content?.trim())
+      throw new BadRequestException('Conteudo da nota nao pode ser vazio');
     return this.prisma.conversationNote.create({
       data: { conversationId, authorId, companyId, content: content.trim() },
       include: { author: { select: { id: true, name: true } } },
     });
   }
 
-  async updateNote(noteId: string, content: string, userId: string, role: string) {
-    if (!content?.trim()) throw new BadRequestException('Conteudo da nota nao pode ser vazio');
-    const note = await this.prisma.conversationNote.findUnique({ where: { id: noteId } });
+  async updateNote(
+    noteId: string,
+    content: string,
+    userId: string,
+    role: string,
+  ) {
+    if (!content?.trim())
+      throw new BadRequestException('Conteudo da nota nao pode ser vazio');
+    const note = await this.prisma.conversationNote.findUnique({
+      where: { id: noteId },
+    });
     if (!note) throw new NotFoundException('Nota nao encontrada');
     if (note.authorId !== userId && role !== 'ADMIN') {
-      throw new ForbiddenException('Voce nao pode editar notas de outros usuarios');
+      throw new ForbiddenException(
+        'Voce nao pode editar notas de outros usuarios',
+      );
     }
     return this.prisma.conversationNote.update({
       where: { id: noteId },
@@ -350,10 +444,14 @@ export class ConversationsService {
   }
 
   async deleteNote(noteId: string, userId: string, role: string) {
-    const note = await this.prisma.conversationNote.findUnique({ where: { id: noteId } });
+    const note = await this.prisma.conversationNote.findUnique({
+      where: { id: noteId },
+    });
     if (!note) throw new NotFoundException('Nota nao encontrada');
     if (note.authorId !== userId && role !== 'ADMIN') {
-      throw new ForbiddenException('Voce nao pode deletar notas de outros usuarios');
+      throw new ForbiddenException(
+        'Voce nao pode deletar notas de outros usuarios',
+      );
     }
     await this.prisma.conversationNote.delete({ where: { id: noteId } });
     return { deleted: true };
