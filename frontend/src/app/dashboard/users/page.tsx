@@ -64,7 +64,7 @@ export default function UsersPage() {
   });
 
   // Edit form state
-  const [editForm, setEditForm] = useState({ name: '', role: '' });
+  const [editForm, setEditForm] = useState({ name: '', role: '', password: '' });
 
   if (!isAdmin) {
     return (
@@ -92,10 +92,12 @@ export default function UsersPage() {
   const handleEdit = async () => {
     if (!editingUser) return;
     try {
-      await updateUser.mutateAsync({
-        id: editingUser.id,
-        dto: { name: editForm.name, role: editForm.role },
-      });
+      const dto: { name: string; role: string; password?: string } = {
+        name: editForm.name,
+        role: editForm.role,
+      };
+      if (editForm.password.trim()) dto.password = editForm.password.trim();
+      await updateUser.mutateAsync({ id: editingUser.id, dto });
       toast.success('Usuario atualizado');
       setEditingUser(null);
     } catch (err: any) {
@@ -131,7 +133,7 @@ export default function UsersPage() {
   };
 
   const openEditDialog = (user: User) => {
-    setEditForm({ name: user.name, role: user.role });
+    setEditForm({ name: user.name, role: user.role, password: '' });
     setEditingUser(user);
   };
 
@@ -322,6 +324,18 @@ export default function UsersPage() {
                   <SelectItem value="ADMIN">Administrador</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">Nova Senha</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                value={editForm.password}
+                onChange={(e) =>
+                  setEditForm((f) => ({ ...f, password: e.target.value }))
+                }
+                placeholder="Deixe em branco para manter a atual"
+              />
             </div>
           </div>
           <DialogFooter>

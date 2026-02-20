@@ -40,7 +40,7 @@ export function useUpdateUser() {
       dto,
     }: {
       id: string;
-      dto: { name?: string; role?: string; isActive?: boolean };
+      dto: { name?: string; role?: string; isActive?: boolean; password?: string };
     }) => {
       const { data } = await apiClient.patch(`/users/${id}`, dto);
       return data;

@@ -16,7 +16,7 @@ export class MessagesService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private moduleRef: ModuleRef,
-  ) {}
+  ) { }
 
   private getWebsocketGateway(): WebsocketGateway | null {
     try {
@@ -58,9 +58,21 @@ export class MessagesService {
       },
     });
 
-    // Build WhatsApp text with agent name prefix
-    const whatsappText = agentName
-      ? `*${agentName}*: ${dto.content}`
+    // Fetch agent's department name to build '*Nome - Setor*:' prefix
+    let agentPrefix = agentName || null;
+    if (agentName) {
+      const agentUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { department: { select: { name: true } } },
+      });
+      if (agentUser?.department?.name) {
+        agentPrefix = `${agentName} - ${agentUser.department.name}`;
+      }
+    }
+
+    // Build WhatsApp text with agent name+department prefix
+    const whatsappText = agentPrefix
+      ? `*${agentPrefix}*: ${dto.content}`
       : dto.content;
 
     // Use chatId from metadata (LID) for WAHA, fallback to customerPhone
@@ -81,7 +93,6 @@ export class MessagesService {
         `Message sent for conversation ${dto.conversationId}, waId: ${waMessageId}`,
       );
 
-      // Update message with WhatsApp ID and status
       const updatedMessage = await this.prisma.message.update({
         where: { id: message.id },
         data: {
@@ -93,13 +104,11 @@ export class MessagesService {
         },
       });
 
-      // Update conversation timestamp
       await this.prisma.conversation.update({
         where: { id: dto.conversationId },
         data: { lastMessageAt: new Date() },
       });
 
-      // Emit to WebSocket
       const gateway = this.getWebsocketGateway();
       if (gateway) {
         gateway.emitToConversation(
@@ -116,7 +125,6 @@ export class MessagesService {
         error.response?.data || error.stack,
       );
 
-      // Update message as FAILED
       await this.prisma.message.update({
         where: { id: message.id },
         data: { status: 'FAILED' },
@@ -385,18 +393,18 @@ export class MessagesService {
       include: { sentBy: { select: { id: true, name: true } } },
     });
 
-    const uniqueFilename = `${randomUUID()}.${ext || 'bin'}`;
-    const uploadsDir = join(process.cwd(), 'uploads');
-    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-    fs.writeFileSync(join(uploadsDir, uniqueFilename), fileBuffer);
-    const backendUrl = process.env.BACKEND_URL || 'http://192.168.10.156:4000';
-    const mediaUrl = `${backendUrl}/uploads/${uniqueFilename}`;
-
     const base64Data = fileBuffer.toString('base64');
     const meta = conversation.metadata as any;
     const sendTo = meta?.chatId || conversation.customerPhone;
 
     try {
+      const uniqueFilename = `${randomUUID()}.${ext || 'bin'}`;
+      const uploadsDir = join(process.cwd(), 'uploads');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      fs.writeFileSync(join(uploadsDir, uniqueFilename), fileBuffer);
+      const backendUrl = process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+      const mediaUrl = `${backendUrl}/uploads/${uniqueFilename}`;
+
       const waResponse = await this.whatsappService.sendMediaMessage(
         conversation.company.whatsappAccessToken,
         conversation.company.whatsappPhoneNumberId,

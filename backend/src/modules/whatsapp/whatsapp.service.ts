@@ -177,9 +177,11 @@ export class WhatsappService {
   ) {
     const chatId = to.includes('@') ? to : `${to}@c.us`;
     const mimetype = this.getMimetype(filename);
+    const isImage = mimetype.startsWith('image/');
+    const endpoint = isImage ? '/api/sendImage' : '/api/sendFile';
     try {
       const response = await axios.post(
-        `${this.wahaApiUrl}/api/sendFile`,
+        `${this.wahaApiUrl}${endpoint}`,
         {
           session: this.wahaSession,
           chatId,

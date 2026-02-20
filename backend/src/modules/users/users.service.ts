@@ -84,9 +84,14 @@ export class UsersService {
   }
 
   async update(id: string, dto: UpdateUserDto) {
+    const { password, ...rest } = dto;
+    const data: any = { ...rest };
+    if (password) {
+      data.passwordHash = await bcrypt.hash(password, 10);
+    }
     return this.prisma.user.update({
       where: { id },
-      data: dto,
+      data,
       select: {
         id: true,
         email: true,
