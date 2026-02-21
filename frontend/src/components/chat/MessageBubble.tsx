@@ -53,11 +53,11 @@ function MediaContent({ message }: { message: Message }) {
   switch (message.type) {
     case MessageType.IMAGE:
       return message.mediaUrl ? (
-        <div className="relative group inline-block max-w-full mb-1">
+        <div className="relative group block w-full mb-1">
           <img
             src={message.mediaUrl}
             alt={message.content || 'Imagem'}
-            className="rounded-md"
+            className="w-full max-h-[260px] object-cover rounded-md"
             loading="lazy"
           />
           <button
@@ -76,7 +76,7 @@ function MediaContent({ message }: { message: Message }) {
 
     case MessageType.DOCUMENT:
       return (
-        <div className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-md mb-1 border cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleDownload}>
+        <div className="w-full flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-md mb-1 border cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleDownload}>
           <div className="flex items-center gap-2 overflow-hidden">
             <FileText className="h-5 w-5 text-blue-500 shrink-0" />
             <span className="text-sm truncate font-medium">
@@ -89,12 +89,12 @@ function MediaContent({ message }: { message: Message }) {
 
     case MessageType.AUDIO:
       return message.mediaUrl ? (
-        <div className="flex items-center gap-2 mb-1">
-          <audio controls src={message.mediaUrl} className="max-w-[200px] h-10" />
+        <div className="flex items-center gap-2 mb-1 w-full">
+          <audio controls src={message.mediaUrl} className="flex-1 h-10 min-w-0" />
           <DownloadButton />
         </div>
       ) : (
-        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md mb-1">
+        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md mb-1 w-full">
           <Mic className="h-5 w-5 text-green-500 shrink-0" />
           <span className="text-sm">Audio</span>
         </div>
@@ -102,7 +102,7 @@ function MediaContent({ message }: { message: Message }) {
 
     case MessageType.VIDEO:
       return (
-        <div className="flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-md mb-1 border cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleDownload}>
+        <div className="w-full flex items-center justify-between gap-2 p-2 bg-gray-50 rounded-md mb-1 border cursor-pointer hover:bg-gray-100 transition-colors" onClick={handleDownload}>
           <div className="flex items-center gap-2">
             <Video className="h-5 w-5 text-purple-500 shrink-0" />
             <span className="text-sm font-medium">
