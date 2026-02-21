@@ -161,6 +161,21 @@ export class WahaWebhookController {
     // --- Flow Engine Logic ---
     if (conversation.flowState === 'GREETING') {
       if (!conversation.greetingSentAt) {
+        // Claim atômico: somente quem conseguir setar greetingSentAt (quando ainda null) procede.
+        // Evita duplicidade quando webhook e polling processam o mesmo evento simultaneamente.
+        const claimed = await this.prisma.conversation.updateMany({
+          where: { id: conversation.id, flowState: 'GREETING', greetingSentAt: null },
+          data: { greetingSentAt: new Date() },
+        });
+
+        if (claimed.count === 0) {
+          // Outro handler já enviou o greeting — salva a mensagem e encerra
+          await this.messagesService.handleIncomingMessage(
+            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile,
+          );
+          return;
+        }
+
         // First message: check for previous attendance and suggest routing
         this.logger.log(
           `[FLOW] Checking for previous attendance for ${customerPhone}`,
@@ -200,10 +215,6 @@ export class WahaWebhookController {
           // Horário comercial, prossegue com o menu normal
           this.logger.log(`[FLOW] Sending greeting to ${customerPhone} `);
           await this.flowEngineService.sendGreeting(conversation);
-          await this.prisma.conversation.update({
-            where: { id: conversation.id },
-            data: { greetingSentAt: new Date() },
-          });
         }
       } else {
         // Second message: process menu choice

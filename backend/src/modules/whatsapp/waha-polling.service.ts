@@ -222,11 +222,14 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
 
         if (conversation.flowState === 'GREETING') {
           if (!conversation.greetingSentAt) {
-            await this.flowEngineService.sendGreeting(conversation);
-            await this.prisma.conversation.update({
-              where: { id: conversation.id },
+            // Claim atômico: evita duplicidade com o webhook processando o mesmo evento
+            const claimed = await this.prisma.conversation.updateMany({
+              where: { id: conversation.id, flowState: 'GREETING', greetingSentAt: null },
               data: { greetingSentAt: new Date() },
             });
+            if (claimed.count > 0) {
+              await this.flowEngineService.sendGreeting(conversation);
+            }
           } else {
             const body = (msg.body || '').trim();
             const slugHint = this.flowEngineService.processMenuChoice(body);
