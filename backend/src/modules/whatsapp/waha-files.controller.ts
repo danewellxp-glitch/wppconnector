@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Res, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Response } from 'express';
+import type { Response } from 'express';
 import * as http from 'http';
 import * as https from 'https';
 
