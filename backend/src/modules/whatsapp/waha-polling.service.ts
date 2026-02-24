@@ -137,7 +137,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
       const msgRes = await axios.get(
         `${this.wahaApiUrl}/api/${this.wahaSession}/chats/${encodeURIComponent(chatId)}/messages`,
         {
-          params: { limit: chat.unreadCount, downloadMedia: false },
+          params: { limit: chat.unreadCount, downloadMedia: true },
           headers: this.wahaHeaders(),
         },
       );
