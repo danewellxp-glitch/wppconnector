@@ -46,6 +46,9 @@ export function ConversationList() {
       matchesStatus = c.status === 'OPEN' && (!c.departmentId || c.flowState !== 'DEPARTMENT_SELECTED');
     } else if (statusFilter) {
       matchesStatus = c.status === statusFilter;
+    } else {
+      // Se não tem filtro (Todas), não vamos esconder as resolvidas
+      matchesStatus = true;
     }
 
     return matchesSearch && matchesStatus;
@@ -137,11 +140,14 @@ export function ConversationList() {
                       })}
                     </span>
                   </div>
-                  {conv.department && (
-                    <div className="mt-0.5">
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {conv.department && (
                       <DepartmentBadge department={conv.department} />
-                    </div>
-                  )}
+                    )}
+                    {conv.status === 'RESOLVED' && (
+                      <Badge variant="secondary" className="text-[10px] h-5 px-1 bg-gray-200 text-gray-700">Resolvido</Badge>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-xs text-muted-foreground truncate">
                       {lastMessage?.content || 'Sem mensagens'}

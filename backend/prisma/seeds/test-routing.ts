@@ -70,9 +70,9 @@ async function main() {
   try {
     console.log('\n' + '='.repeat(70));
     console.log('🚀 TESTES DE ROTEAMENTO AUTOMÁTICO - SIM ESTEARINA');
+    console.log('   (Modelo WhatsApp — sem status online/offline)');
     console.log('='.repeat(70));
 
-    // Limpar conversas antigas para não ter conflito de unique constraint
     const company = await prisma.company.findFirst({
       where: { name: 'SIM Estearina Indústria e Comércio Ltda' },
     });
@@ -120,37 +120,8 @@ async function main() {
       });
     }
 
-    // TESTE 4: Marcar agentes como ONLINE
-    await test('Marcar agentes como ONLINE', async () => {
-      const agents = await prisma.user.findMany({
-        where: {
-          email: {
-            in: [
-              'lab1@simestearina.com.br',
-              'comercial1@simestearina.com.br',
-              'financeiro1@simestearina.com.br',
-              'admin1@simestearina.com.br',
-            ],
-          },
-        },
-      });
-
-      for (const agent of agents) {
-        await prisma.user.update({
-          where: { id: agent.id },
-          data: { onlineStatus: 'ONLINE' },
-        });
-      }
-
-      const updated = await prisma.user.findMany({
-        where: { id: { in: agents.map((a) => a.id) } },
-      });
-      const allOnline = updated.every((u) => u.onlineStatus === 'ONLINE');
-      if (!allOnline) throw new Error('Not all agents marked as ONLINE');
-    });
-
-    // TESTE 5: Criar conversa e rotear para Laboratório
-    await test('Roteamento para Laboratório (disponível)', async () => {
+    // TESTE 4: Roteamento para Laboratório
+    await test('Roteamento para Laboratório (qualquer agente ativo)', async () => {
       const company = await prisma.company.findFirst({
         where: { name: 'SIM Estearina Indústria e Comércio Ltda' },
       });
@@ -167,26 +138,17 @@ async function main() {
         },
       });
 
-      // Simular roteamento
       const labDept = await prisma.department.findFirst({
-        where: {
-          companyId: company.id,
-          slug: 'laboratorio',
-        },
+        where: { companyId: company.id, slug: 'laboratorio' },
       });
-
       if (!labDept) throw new Error('Lab department not found');
 
+      // No new model: any active agent is available
       const labAgent = await prisma.user.findFirst({
-        where: {
-          departmentId: labDept.id,
-          onlineStatus: 'ONLINE',
-        },
+        where: { departmentId: labDept.id, isActive: true },
       });
+      if (!labAgent) throw new Error('No active lab agent found');
 
-      if (!labAgent) throw new Error('Lab agent not online');
-
-      // Atualizar conversa como se foi roteada
       const routed = await prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -203,23 +165,22 @@ async function main() {
         throw new Error('Conversation not assigned to agent');
     });
 
-    // TESTE 6: Testar fallback para Administrativo (offline)
-    await test('Fallback para Administrativo quando setor offline', async () => {
+    // TESTE 5: Fallback para Administrativo quando setor não tem agentes
+    await test('Fallback para Administrativo quando setor sem agentes', async () => {
       const company = await prisma.company.findFirst({
         where: { name: 'SIM Estearina Indústria e Comércio Ltda' },
       });
       if (!company) throw new Error('Company not found');
 
-      // Marcar agentes do Comercial como OFFLINE
-      const comercialDept = await prisma.department.findFirst({
-        where: { companyId: company.id, slug: 'comercial' },
+      const adminDept = await prisma.department.findFirst({
+        where: { companyId: company.id, isRoot: true },
       });
-      if (!comercialDept) throw new Error('Comercial department not found');
+      if (!adminDept) throw new Error('Admin department not found');
 
-      await prisma.user.updateMany({
-        where: { departmentId: comercialDept.id },
-        data: { onlineStatus: 'OFFLINE' },
+      const adminAgent = await prisma.user.findFirst({
+        where: { departmentId: adminDept.id, isActive: true },
       });
+      if (!adminAgent) throw new Error('No active admin agent for fallback');
 
       const timestamp = Date.now();
       const conversation = await prisma.conversation.create({
@@ -232,23 +193,7 @@ async function main() {
         },
       });
 
-      // Tentar rotear para Comercial - deve ir para Admin
-      const adminDept = await prisma.department.findFirst({
-        where: { companyId: company.id, isRoot: true },
-      });
-
-      if (!adminDept) throw new Error('Admin department not found');
-
-      const adminAgent = await prisma.user.findFirst({
-        where: {
-          departmentId: adminDept.id,
-          onlineStatus: 'ONLINE',
-        },
-      });
-
-      if (!adminAgent) throw new Error('Admin agent not online for fallback');
-
-      // Simular roteamento fallback
+      // Simulate routing to admin (fallback path)
       const fallback = await prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -263,7 +208,7 @@ async function main() {
         throw new Error('Fallback did not route to root department');
     });
 
-    // TESTE 7: Load balancing - agente com menos conversas
+    // TESTE 6: Load balancing - agente com menos conversas
     await test('Load balancing: atribuir a agente menos ocupado', async () => {
       const company = await prisma.company.findFirst({
         where: { name: 'SIM Estearina Indústria e Comércio Ltda' },
@@ -275,18 +220,6 @@ async function main() {
       });
       if (!labDept) throw new Error('Lab dept not found');
 
-      // Marcar lab2 como ONLINE também
-      const lab2 = await prisma.user.findFirst({
-        where: { email: 'lab2@simestearina.com.br' },
-      });
-      if (lab2) {
-        await prisma.user.update({
-          where: { id: lab2.id },
-          data: { onlineStatus: 'ONLINE' },
-        });
-      }
-
-      // Criar 2 conversas para Lab
       const timestamp = Date.now();
       const conv1 = await prisma.conversation.create({
         data: {
@@ -311,8 +244,10 @@ async function main() {
       const lab1 = await prisma.user.findFirst({
         where: { email: 'lab1@simestearina.com.br' },
       });
+      const lab2 = await prisma.user.findFirst({
+        where: { email: 'lab2@simestearina.com.br' },
+      });
 
-      // Atribuir conv1 a lab1 (agora lab1 tem 2 conversas)
       await prisma.conversation.update({
         where: { id: conv1.id },
         data: {
@@ -322,7 +257,6 @@ async function main() {
         },
       });
 
-      // conv2 deve ir para lab2 (menos carregado)
       if (lab2) {
         await prisma.conversation.update({
           where: { id: conv2.id },
@@ -343,7 +277,7 @@ async function main() {
       }
     });
 
-    // TESTE 8: Verificar mensagem de saudação
+    // TESTE 7: Verificar mensagem de saudação
     await test('Mensagem de saudação salva', async () => {
       const company = await prisma.company.findFirst({
         where: { name: 'SIM Estearina Indústria e Comércio Ltda' },
@@ -355,14 +289,14 @@ async function main() {
         throw new Error('Greeting message does not contain company name');
     });
 
-    // TESTE 9: Verificar menu aliases
+    // TESTE 8: Verificar menu aliases
     await test('Menu aliases normalizados', async () => {
       const testCases = [
         { input: 'LABORATORIO', expected: 'laboratorio' },
         { input: 'laboratório', expected: 'laboratorio' },
-        { input: 'análise', expected: 'analise' }, // normalized form
+        { input: 'análise', expected: 'analise' },
         { input: 'COMERCIAL', expected: 'comercial' },
-        { input: 'cotação', expected: 'cotacao' }, // normalized form
+        { input: 'cotação', expected: 'cotacao' },
         { input: 'FINANCEIRO', expected: 'financeiro' },
         { input: 'boleto', expected: 'boleto' },
         { input: 'administrativo', expected: 'administrativo' },

@@ -133,7 +133,6 @@ async function main() {
             role: 'AGENT',
             companyId: company.id,
             departmentId: deptMap[agent.department],
-            onlineStatus: 'OFFLINE',
             isActive: true,
           },
         });

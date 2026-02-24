@@ -52,7 +52,7 @@ export const useChatStore = create<ChatState>((set) => ({
       const newMessages = { ...state.messages };
       for (const convId of Object.keys(newMessages)) {
         newMessages[convId] = newMessages[convId].map((m) =>
-          m.id === messageId ? { ...m, status: status as any } : m,
+          m.id === messageId ? { ...m, status: status as Message['status'] } : m,
         );
       }
       return { messages: newMessages };

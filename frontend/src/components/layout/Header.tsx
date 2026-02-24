@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LogOut, MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { AgentStatusBar } from '@/components/AgentStatusBar';
 
 export function Header() {
   const { user, logout } = useAuth();
@@ -24,7 +23,6 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4">
-        {(user as any)?.role === 'AGENT' && <AgentStatusBar />}
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{user?.name}</span>
           <Badge variant="secondary">{user?.role}</Badge>

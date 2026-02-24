@@ -14,6 +14,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import Image from 'next/image';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -21,6 +22,7 @@ export function LoginForm() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
 
   const { login } = useAuth();
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -115,8 +117,23 @@ export function LoginForm() {
           <Button type="submit" className="w-full bg-[#1893c8] hover:bg-[#147aa6] text-white transition-colors" disabled={loading}>
             {loading ? 'Entrando...' : 'Entrar na Plataforma'}
           </Button>
+
+          <div className="text-center mt-4">
+            <button
+              type="button"
+              onClick={() => setIsForgotPasswordOpen(true)}
+              className="text-xs text-gray-500 hover:text-[#1893c8] transition-colors"
+            >
+              Problemas com o acesso? / Esqueci minha senha
+            </button>
+          </div>
         </form>
       </CardContent>
+
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+      />
     </Card>
   );
 }

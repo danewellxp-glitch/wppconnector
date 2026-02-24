@@ -20,15 +20,7 @@ import { Role } from '@prisma/client';
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private usersService: UsersService) {}
-
-  @Patch('me/status')
-  setMyStatus(
-    @CurrentUser() user: any,
-    @Body() body: { status: 'ONLINE' | 'BUSY' | 'OFFLINE' },
-  ) {
-    return this.usersService.setMyStatus(user.id, body.status);
-  }
+  constructor(private usersService: UsersService) { }
 
   @Patch('me')
   updateMe(@CurrentUser() user: any, @Body() dto: UpdateUserDto) {
@@ -66,5 +58,21 @@ export class UsersController {
   @Roles(Role.ADMIN)
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
+  }
+
+  // ===== Password Resets =====
+
+  @Get('password-resets/pending')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getPendingPasswordResets(@CurrentUser() user: any) {
+    return this.usersService.getPendingPasswordResets(user.companyId);
+  }
+
+  @Post('password-resets/:requestId/resolve')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  resolvePasswordReset(@Param('requestId') requestId: string) {
+    return this.usersService.resolvePasswordReset(requestId);
   }
 }

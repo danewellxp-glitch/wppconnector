@@ -1,7 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
-import { PrismaService } from './prisma/prisma.service';
 import { AppModule } from './app.module';
 import { join } from 'path';
 import * as fs from 'fs';
@@ -34,21 +33,6 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
 
   app.useStaticAssets(uploadsPath, { prefix: '/uploads' });
-
-  // ============================================================
-  // STARTUP: Reset de agentes que podem estar com status fantasma
-  // ============================================================
-  const prisma = app.get(PrismaService);
-  const reset = await prisma.user.updateMany({
-    where: { onlineStatus: { in: ['ONLINE', 'BUSY'] } },
-    data: { onlineStatus: 'OFFLINE', lastHeartbeatAt: null },
-  });
-  if (reset.count > 0) {
-    Logger.log(
-      `[STARTUP] ${reset.count} agente(s) resetados para OFFLINE`,
-      'Bootstrap',
-    );
-  }
 
   const port = process.env.PORT || 4000;
   await app.listen(port, '0.0.0.0');

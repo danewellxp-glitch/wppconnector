@@ -198,9 +198,9 @@ export class WhatsappService {
         typeof rawId === 'string'
           ? rawId
           : rawId?._serialized ||
-            rawId?.id ||
-            data?.key?.id ||
-            `waha_${Date.now()}`;
+          rawId?.id ||
+          data?.key?.id ||
+          `waha_${Date.now()}`;
       return { messages: [{ id: messageId }] };
     } catch (error: any) {
       this.logger.error(
@@ -230,9 +230,9 @@ export class WhatsappService {
         typeof rawId === 'string'
           ? rawId
           : rawId?._serialized ||
-            rawId?.id ||
-            data?.key?.id ||
-            `waha_${Date.now()}`;
+          rawId?.id ||
+          data?.key?.id ||
+          `waha_${Date.now()}`;
 
       return { messages: [{ id: messageId }] };
     } catch (error: any) {
@@ -264,6 +264,7 @@ export class WhatsappService {
   private async wahaDownloadMedia(mediaUrl: string): Promise<Buffer | null> {
     try {
       const response = await axios.get(mediaUrl, {
+        headers: this.wahaHeaders(),
         responseType: 'arraybuffer',
       });
       return Buffer.from(response.data);

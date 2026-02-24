@@ -7,12 +7,9 @@ import {
   ConnectedSocket,
   MessageBody,
 } from '@nestjs/websockets';
-import { Logger, Inject, forwardRef } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
-import { AgentStatusService } from '../users/agent-status.service';
-import { DepartmentRoutingService } from '../departments/department-routing.service';
 
 function getCorsOrigins(): string | string[] {
   const frontendUrl = process.env.FRONTEND_URL || 'http://192.168.10.156:3100';
@@ -44,12 +41,7 @@ export class WebsocketGateway
 
   private readonly logger = new Logger(WebsocketGateway.name);
 
-  constructor(
-    private jwtService: JwtService,
-    @Inject(forwardRef(() => AgentStatusService))
-    private agentStatusService: AgentStatusService,
-    private moduleRef: ModuleRef,
-  ) {}
+  constructor(private jwtService: JwtService) {}
 
   async handleConnection(client: Socket) {
     try {
@@ -84,7 +76,9 @@ export class WebsocketGateway
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.log(`Client disconnected: ${client.data?.userId || 'unknown'}`);
+    this.logger.debug(
+      `Cliente desconectado: ${client.data?.userId ?? 'unknown'} (${client.id})`,
+    );
   }
 
   @SubscribeMessage('join-conversation')
@@ -128,45 +122,6 @@ export class WebsocketGateway
       conversationId,
       isTyping: false,
     });
-  }
-
-  @SubscribeMessage('agent-online')
-  async handleAgentOnline(@ConnectedSocket() client: Socket) {
-    const userId = client.data.userId;
-    if (userId) {
-      await this.agentStatusService.setStatus(userId, 'ONLINE');
-    }
-  }
-
-  @SubscribeMessage('agent-offline')
-  async handleAgentOffline(@ConnectedSocket() client: Socket) {
-    const userId = client.data.userId;
-    if (userId) {
-      await this.agentStatusService.setStatus(userId, 'OFFLINE');
-      // Lazy load DepartmentRoutingService to avoid circular dependency
-      const routingService = this.moduleRef.get(DepartmentRoutingService, {
-        strict: false,
-      });
-      if (routingService) {
-        await routingService.redistributeOnAgentOffline(userId);
-      }
-    }
-  }
-
-  @SubscribeMessage('agent-busy')
-  async handleAgentBusy(@ConnectedSocket() client: Socket) {
-    const userId = client.data.userId;
-    if (userId) {
-      await this.agentStatusService.setStatus(userId, 'BUSY');
-    }
-  }
-
-  @SubscribeMessage('heartbeat')
-  async handleHeartbeat(@ConnectedSocket() client: Socket) {
-    const userId = client.data.userId;
-    if (userId) {
-      await this.agentStatusService.heartbeat(userId);
-    }
   }
 
   emitToConversation(conversationId: string, event: string, data: any) {

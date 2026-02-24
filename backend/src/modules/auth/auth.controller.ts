@@ -7,7 +7,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Post('register')
   register(@Body() dto: RegisterDto) {
@@ -23,5 +23,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   getProfile(@CurrentUser() user: any) {
     return user;
+  }
+
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: { email: string; reason: string }) {
+    if (!dto.email || !dto.reason) {
+      throw new Error('Email e motivo são obrigatórios');
+    }
+    return this.authService.createPasswordResetRequest(dto.email, dto.reason);
   }
 }

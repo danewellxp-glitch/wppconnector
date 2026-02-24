@@ -8,6 +8,7 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Phone, MessageSquare, Paperclip } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { getSocket } from '@/lib/socket';
@@ -225,11 +226,29 @@ export function ChatWindow() {
       </div>
 
       {/* Input */}
-      <MessageInput
-        conversationId={selectedId}
-        droppedFile={droppedFile}
-        onClearDroppedFile={() => setDroppedFile(null)}
-      />
+      {conversation.status === 'RESOLVED' || conversation.status === 'ARCHIVED' ? (
+        <div className="flex flex-col items-center justify-center p-6 bg-gray-100 border-t">
+          <p className="text-gray-500 mb-3 text-sm">Esta conversa foi finalizada.</p>
+          <Button
+            onClick={async () => {
+              try {
+                await apiClient.post(`/conversations/${selectedId}/start`);
+                // socket will handle state update, or we can just fetch
+              } catch (err) {
+                console.error('Failed to restart chat', err);
+              }
+            }}
+          >
+            Iniciar Novo Atendimento
+          </Button>
+        </div>
+      ) : (
+        <MessageInput
+          conversationId={selectedId}
+          droppedFile={droppedFile}
+          onClearDroppedFile={() => setDroppedFile(null)}
+        />
+      )}
     </div>
   );
 }

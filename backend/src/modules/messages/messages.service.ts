@@ -16,7 +16,7 @@ export class MessagesService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private moduleRef: ModuleRef,
-  ) {}
+  ) { }
 
   private getWebsocketGateway(): WebsocketGateway | null {
     try {
@@ -155,9 +155,7 @@ export class MessagesService {
     });
     if (!conversation && chatId && chatId !== customerPhone) {
       conversation = await this.prisma.conversation.findUnique({
-        where: {
-          companyId_customerPhone: { companyId, customerPhone: chatId },
-        },
+        where: { companyId_customerPhone: { companyId, customerPhone: chatId } },
       });
       if (conversation) {
         conversation = await this.prisma.conversation.update({
@@ -205,6 +203,7 @@ export class MessagesService {
       isBusiness?: boolean;
       profilePictureURL?: string;
     },
+    quotedMsg?: { id?: string; body?: string; type?: string; fromMe?: boolean },
   ) {
     // Check for duplicate (idempotency)
     const existing = await this.prisma.message.findUnique({
@@ -276,6 +275,7 @@ export class MessagesService {
         content,
         mediaUrl: mediaUrl || null,
         status: 'DELIVERED',
+        ...(quotedMsg && { metadata: { quotedMsg } }),
       },
     });
 
@@ -315,14 +315,10 @@ export class MessagesService {
     const gateway = this.getWebsocketGateway();
     if (gateway) {
       if (conversation.departmentId) {
-        gateway.emitToDepartment(
-          conversation.departmentId,
-          'message-received',
-          {
-            message,
-            conversationId: conversation.id,
-          },
-        );
+        gateway.emitToDepartment(conversation.departmentId, 'message-received', {
+          message,
+          conversationId: conversation.id,
+        });
       } else {
         gateway.emitToCompany(companyId, 'message-received', {
           message,
@@ -410,11 +406,9 @@ export class MessagesService {
     try {
       const uniqueFilename = `${randomUUID()}.${ext || 'bin'}`;
       const uploadsDir = join(process.cwd(), 'uploads');
-      if (!fs.existsSync(uploadsDir))
-        fs.mkdirSync(uploadsDir, { recursive: true });
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       fs.writeFileSync(join(uploadsDir, uniqueFilename), fileBuffer);
-      const backendUrl =
-        process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+      const backendUrl = process.env.BACKEND_URL || 'http://192.168.10.156:4000';
       const mediaUrl = `${backendUrl}/uploads/${uniqueFilename}`;
 
       const waResponse = await this.whatsappService.sendMediaMessage(
@@ -445,11 +439,7 @@ export class MessagesService {
 
       const gateway = this.getWebsocketGateway();
       if (gateway) {
-        gateway.emitToConversation(
-          conversationId,
-          'message-sent',
-          updatedMessage,
-        );
+        gateway.emitToConversation(conversationId, 'message-sent', updatedMessage);
       }
 
       return updatedMessage;

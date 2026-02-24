@@ -7,6 +7,7 @@ import {
   useAgentMetrics,
   type MetricsPeriod,
 } from '@/hooks/useMetrics';
+import { useAuthStore } from '@/stores/authStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -39,12 +40,14 @@ const PERIODS: { value: MetricsPeriod; label: string }[] = [
 
 export default function MetricsPage() {
   const [period, setPeriod] = useState<MetricsPeriod>('30d');
+  const user = useAuthStore((s) => s.user);
 
   const { data: dashboard, isLoading: loadingDashboard } = useDashboardMetrics(period);
   const { data: convMetrics, isLoading: loadingConv } = useConversationMetrics(period);
+  // Only fetch agent metrics if user is admin
   const { data: agents, isLoading: loadingAgents } = useAgentMetrics(period);
 
-  const isLoading = loadingDashboard || loadingConv || loadingAgents;
+  const isLoading = loadingDashboard || loadingConv || (user?.role === 'ADMIN' && loadingAgents);
 
   if (isLoading) {
     return (
@@ -69,11 +72,10 @@ export default function MetricsPage() {
               <button
                 key={p.value}
                 onClick={() => setPeriod(p.value)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  period === p.value
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${period === p.value
                     ? 'bg-white text-[#075E54]'
                     : 'text-white hover:bg-[#075E54]'
-                }`}
+                  }`}
               >
                 {p.label}
               </button>
@@ -112,32 +114,37 @@ export default function MetricsPage() {
         </div>
 
         {/* Messages Today + Response Time */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <MetricCard
-            title="Mensagens Hoje"
-            value={dashboard?.messages.today ?? 0}
-            icon={<MessagesSquare className="h-4 w-4 text-[#128C7E]" />}
-            description={`Total: ${dashboard?.messages.total ?? 0}`}
-          />
-          <Card className="border-l-4 border-l-[#25D366] bg-white shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="border-l-4 border-l-[#25D366] bg-white shadow-sm border border-[#D1F4E0]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#075E54]">Hoje por Direcao</CardTitle>
+              <CardTitle className="text-sm font-medium text-[#075E54]">Volume de Mensagens (Hoje)</CardTitle>
+              <MessagesSquare className="h-4 w-4 text-[#128C7E]" />
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <ArrowDownLeft className="h-4 w-4 text-[#34B7F1]" />
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex flex-col items-center">
                   <span className="text-2xl font-bold text-[#075E54]">
                     {dashboard?.messages.inboundToday ?? 0}
                   </span>
-                  <span className="text-xs text-[#667781]">recebidas</span>
+                  <span className="text-xs text-[#667781] flex items-center gap-1">
+                    <ArrowDownLeft className="h-3 w-3 text-[#34B7F1]" /> Recebidas
+                  </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ArrowUpRight className="h-4 w-4 text-[#25D366]" />
+                <div className="h-8 w-px bg-gray-200"></div>
+                <div className="flex flex-col items-center">
                   <span className="text-2xl font-bold text-[#075E54]">
                     {dashboard?.messages.outboundToday ?? 0}
                   </span>
-                  <span className="text-xs text-[#667781]">enviadas</span>
+                  <span className="text-xs text-[#667781] flex items-center gap-1">
+                    <ArrowUpRight className="h-3 w-3 text-[#25D366]" /> Enviadas
+                  </span>
+                </div>
+                <div className="h-8 w-px bg-gray-200"></div>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-bold text-[#075E54]">
+                    {dashboard?.messages.today ?? 0}
+                  </span>
+                  <span className="text-xs text-[#667781]">Total Hoje</span>
                 </div>
               </div>
             </CardContent>
@@ -173,53 +180,55 @@ export default function MetricsPage() {
           />
         </div>
 
-        {/* Agent Performance Table */}
-        <Card className="border border-[#D1F4E0] bg-white shadow-sm">
-          <CardHeader className="border-b border-[#E8F5E9] bg-[#F0F9F4]">
-            <CardTitle className="flex items-center gap-2 text-[#075E54]">
-              <Users className="h-5 w-5 text-[#25D366]" />
-              Performance dos Atendentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {agents && agents.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[#E8F5E9] hover:bg-[#F0F9F4]">
-                    <TableHead className="text-[#075E54]">Atendente</TableHead>
-                    <TableHead className="text-center text-[#075E54]">Conversas Ativas</TableHead>
-                    <TableHead className="text-center text-[#075E54]">Total Atribuicoes</TableHead>
-                    <TableHead className="text-center text-[#075E54]">Mensagens Enviadas</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agents.map((agent) => (
-                    <TableRow key={agent.id} className="border-[#E8F5E9] hover:bg-[#F0F9F4]">
-                      <TableCell className="font-medium text-[#3B4A54]">{agent.name}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          className={
-                            agent.activeConversations > 0
-                              ? 'bg-[#25D366] hover:bg-[#128C7E] text-white'
-                              : 'bg-[#E8F5E9] text-[#075E54]'
-                          }
-                        >
-                          {agent.activeConversations}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-[#3B4A54]">{agent.totalAssignments}</TableCell>
-                      <TableCell className="text-center text-[#3B4A54]">{agent.totalMessagesSent}</TableCell>
+        {/* Agent Performance Table - ADMIN ONLY */}
+        {user?.role === 'ADMIN' && (
+          <Card className="border border-[#D1F4E0] bg-white shadow-sm">
+            <CardHeader className="border-b border-[#E8F5E9] bg-[#F0F9F4]">
+              <CardTitle className="flex items-center gap-2 text-[#075E54]">
+                <Users className="h-5 w-5 text-[#25D366]" />
+                Performance dos Atendentes
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {agents && agents.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[#E8F5E9] hover:bg-[#F0F9F4]">
+                      <TableHead className="text-[#075E54]">Atendente</TableHead>
+                      <TableHead className="text-center text-[#075E54]">Conversas Ativas</TableHead>
+                      <TableHead className="text-center text-[#075E54]">Total Atribuicoes</TableHead>
+                      <TableHead className="text-center text-[#075E54]">Mensagens Enviadas</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="text-center py-8 text-[#667781]">
-                Nenhum atendente ativo encontrado
-              </p>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {agents.map((agent) => (
+                      <TableRow key={agent.id} className="border-[#E8F5E9] hover:bg-[#F0F9F4]">
+                        <TableCell className="font-medium text-[#3B4A54]">{agent.name}</TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            className={
+                              agent.activeConversations > 0
+                                ? 'bg-[#25D366] hover:bg-[#128C7E] text-white'
+                                : 'bg-[#E8F5E9] text-[#075E54]'
+                            }
+                          >
+                            {agent.activeConversations}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center text-[#3B4A54]">{agent.totalAssignments}</TableCell>
+                        <TableCell className="text-center text-[#3B4A54]">{agent.totalMessagesSent}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="text-center py-8 text-[#667781]">
+                  Nenhum atendente ativo encontrado
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

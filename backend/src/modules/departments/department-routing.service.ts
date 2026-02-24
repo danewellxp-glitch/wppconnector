@@ -110,9 +110,9 @@ export class DepartmentRoutingService {
       return conversationId;
     }
 
-    // Setor offline — redirecionar para Admin imediatamente
+    // Setor sem agentes cadastrados — redirecionar para Admin
     this.logger.log(
-      `[ROUTING] Setor ${dept.name} sem agentes. Redirecionando para Admin.`,
+      `[ROUTING] Setor ${dept.name} sem agentes cadastrados. Redirecionando para Admin.`,
     );
     await this.redirectToAdmin(conversationId, companyId, 'offline');
     return conversationId;
@@ -129,7 +129,6 @@ export class DepartmentRoutingService {
           where: {
             departmentId,
             isActive: true,
-            onlineStatus: { in: ['ONLINE', 'BUSY'] },
           },
           include: {
             _count: {
@@ -194,7 +193,6 @@ export class DepartmentRoutingService {
       where: {
         departmentId,
         isActive: true,
-        onlineStatus: { in: ['ONLINE', 'BUSY'] },
       },
       include: {
         _count: {
@@ -265,74 +263,6 @@ export class DepartmentRoutingService {
     }
   }
 
-  async redistributeOnAgentOffline(userId: string) {
-    const conversations = await this.prisma.conversation.findMany({
-      where: {
-        assignedUserId: userId,
-        status: { in: ['OPEN', 'ASSIGNED'] },
-        flowState: { in: ['ASSIGNED', 'DEPARTMENT_SELECTED'] },
-      },
-    });
-
-    if (conversations.length === 0) return;
-
-    this.logger.log(
-      `[REDISTRIBUTE] Agente ${userId} offline. ` +
-        `Redistribuindo ${conversations.length} conversa(s)...`,
-    );
-
-    for (const conv of conversations) {
-      // 1. liberar a conversa sequencialmente
-      await this.prisma.conversation.update({
-        where: { id: conv.id },
-        data: {
-          assignedUserId: null,
-          flowState: 'DEPARTMENT_SELECTED',
-          status: 'OPEN',
-          timeoutAt: null,
-        },
-      });
-
-      // 2. tentar reatribuir para outro agente do mesmo setor
-      if (!conv.departmentId) {
-        this.logger.warn(`[REDISTRIBUTE] Conversa ${conv.id} sem departmentId`);
-        continue;
-      }
-
-      const newAgent = await this.assignToAgent(conv.id, conv.departmentId);
-
-      if (newAgent) {
-        this.logger.log(
-          `[REDISTRIBUTE] Conversa ${conv.id} → agente ${newAgent.id}`,
-        );
-        const gateway = this.getWebsocketGateway();
-        if (gateway) {
-          const convUpdated = await this.prisma.conversation.findUnique({
-            where: { id: conv.id },
-            include: { department: true },
-          });
-          gateway.emitToUser(newAgent.id, 'conversation-assigned', {
-            conversationId: conv.id,
-            conversation: convUpdated,
-            agentName: newAgent.name,
-          });
-        }
-      } else {
-        // nenhum agente disponível: manter visível na fila do setor
-        this.logger.log(
-          `[REDISTRIBUTE] Conversa ${conv.id} → sem agentes, voltou para fila`,
-        );
-        const gateway = this.getWebsocketGateway();
-        if (gateway) {
-          gateway.emitToDepartment(conv.departmentId, 'conversation-queued', {
-            conversationId: conv.id,
-            reason: 'agent_offline',
-          });
-        }
-      }
-    }
-  }
-
   private async redirectToAdmin(
     conversationId: string,
     companyId: string,
@@ -359,7 +289,7 @@ export class DepartmentRoutingService {
       timeout:
         'Tempo de espera esgotado. Redirecionando para o Administrativo...',
       offline:
-        'O setor solicitado está indisponível. Redirecionando para o Administrativo...',
+        'Nenhum atendente encontrado neste setor. Redirecionando para o Administrativo...',
       all_offline:
         'Todos os atendentes estão indisponíveis no momento. ' +
         'Sua mensagem foi registrada e entraremos em contato em breve. 🙏',

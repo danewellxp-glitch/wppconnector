@@ -4,13 +4,14 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-  ) {}
+  ) { }
 
   async register(dto: RegisterDto) {
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -56,18 +57,9 @@ export class AuthService {
       throw new UnauthorizedException('Credenciais invalidas');
     }
 
-    // Set user as ONLINE automatically upon successful login
-    const updatedUser = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        onlineStatus: 'ONLINE',
-        lastHeartbeatAt: new Date(),
-      },
-    });
-
     const token = this.generateToken(user);
 
-    const { passwordHash, ...userWithoutPassword } = updatedUser;
+    const { passwordHash, ...userWithoutPassword } = user;
 
     return { user: userWithoutPassword, token };
   }
@@ -82,7 +74,6 @@ export class AuthService {
         role: true,
         companyId: true,
         departmentId: true,
-        onlineStatus: true,
         isActive: true,
       },
     });
@@ -104,5 +95,40 @@ export class AuthService {
     };
 
     return this.jwtService.sign(payload);
+  }
+
+  async createPasswordResetRequest(email: string, reason: string) {
+    // 1. Find user by email
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, companyId: true }
+    });
+
+    // 2. If user exists, create the request
+    // We always return success to the frontend to prevent email enumeration
+    if (user) {
+      // Create request (or update existing pending one to avoid spam)
+      const existingPending = await this.prisma.passwordResetRequest.findFirst({
+        where: { userId: user.id, status: ResetStatus.PENDING }
+      });
+
+      if (existingPending) {
+        await this.prisma.passwordResetRequest.update({
+          where: { id: existingPending.id },
+          data: { reason, updatedAt: new Date() }
+        });
+      } else {
+        await this.prisma.passwordResetRequest.create({
+          data: {
+            userId: user.id,
+            companyId: user.companyId,
+            reason,
+            status: ResetStatus.PENDING
+          }
+        });
+      }
+    }
+
+    return { success: true, message: 'Solicitação registrada com sucesso (se o e-mail existir).' };
   }
 }

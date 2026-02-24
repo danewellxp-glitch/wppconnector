@@ -32,16 +32,13 @@ async function main() {
 
   users.forEach((user, index) => {
     const roleEmoji = user.role === 'ADMIN' ? '👑' : '👤';
-    const statusEmoji = user.onlineStatus === 'ONLINE' ? '🟢' : user.onlineStatus === 'BUSY' ? '🟡' : '⚪';
     const activeEmoji = user.isActive ? '✅' : '❌';
 
     console.log(`${index + 1}. ${roleEmoji} ${user.name}`);
     console.log(`   Email: ${user.email}`);
     console.log(`   Role: ${user.role}`);
     console.log(`   Departamento: ${user.department?.name || '(Sem departamento)'} ${user.department?.isRoot ? ' [ROOT]' : ''}`);
-    console.log(`   Status: ${statusEmoji} ${user.onlineStatus}`);
     console.log(`   Ativo: ${activeEmoji} ${user.isActive ? 'Sim' : 'Não'}`);
-    console.log(`   Último Heartbeat: ${user.lastHeartbeatAt ? new Date(user.lastHeartbeatAt).toLocaleString('pt-BR') : 'Nunca'}`);
     console.log(`   Criado em: ${new Date(user.createdAt).toLocaleString('pt-BR')}`);
     console.log('');
   });

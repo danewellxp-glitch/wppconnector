@@ -63,3 +63,4 @@ export function useDeleteUser() {
     },
   });
 }
+export function usePendingPasswordResets() { return useQuery<any[]>({ queryKey: ['password-resets', 'pending'], queryFn: async () => { const { data } = await apiClient.get('/users/password-resets/pending'); return data; }, }); } export function useResolvePasswordReset() { const queryClient = useQueryClient(); return useMutation({ mutationFn: async (requestId: string) => { const { data } = await apiClient.post(`/users/password-resets/${requestId}/resolve`); return data; }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['password-resets', 'pending'] }); }, }); }

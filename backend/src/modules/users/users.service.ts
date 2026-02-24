@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { UserStatus } from '@prisma/client';
+import { ResetStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -7,21 +7,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
-
-  async setMyStatus(userId: string, status: UserStatus) {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { onlineStatus: status, lastHeartbeatAt: new Date() },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        onlineStatus: true,
-      },
-    });
-  }
+  constructor(private prisma: PrismaService) { }
 
   async findAll(companyId: string) {
     return this.prisma.user.findMany({
@@ -33,7 +19,6 @@ export class UsersService {
         role: true,
         departmentId: true,
         department: { select: { name: true } },
-        onlineStatus: true,
         isActive: true,
         createdAt: true,
       },
@@ -89,6 +74,12 @@ export class UsersService {
     const data: any = { ...rest };
     if (password) {
       data.passwordHash = await bcrypt.hash(password, 10);
+
+      // If password is changed, resolve any pending reset requests
+      await this.prisma.passwordResetRequest.updateMany({
+        where: { userId: id, status: ResetStatus.PENDING },
+        data: { status: ResetStatus.RESOLVED }
+      });
     }
     return this.prisma.user.update({
       where: { id },
@@ -114,6 +105,27 @@ export class UsersService {
         role: true,
         isActive: true,
       },
+    });
+  }
+
+  // ===== Password Resets =====
+
+  async getPendingPasswordResets(companyId: string) {
+    return this.prisma.passwordResetRequest.findMany({
+      where: { companyId, status: ResetStatus.PENDING },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+  }
+
+  async resolvePasswordReset(requestId: string) {
+    return this.prisma.passwordResetRequest.update({
+      where: { id: requestId },
+      data: { status: ResetStatus.RESOLVED }
     });
   }
 }

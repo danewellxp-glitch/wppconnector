@@ -25,6 +25,7 @@ model Company {
   quickReplies          QuickReply[]
   departments           Department[]
   conversationNotes     ConversationNote[]
+  passwordResetRequests PasswordResetRequest[]
 
   @@map("companies")
 }
@@ -59,8 +60,6 @@ model User {
   passwordHash      String
   name              String
   role              Role       @default(AGENT)
-  onlineStatus      UserStatus @default(OFFLINE)
-  lastHeartbeatAt   DateTime?
   isActive          Boolean    @default(true)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
@@ -72,6 +71,7 @@ model User {
   auditLogs             AuditLog[]
   assignedConversations Conversation[] @relation("AssignedConversations")
   conversationNotes     ConversationNote[]
+  passwordResetRequests PasswordResetRequest[]
 
   @@index([companyId, email])
   @@index([departmentId])
@@ -81,12 +81,6 @@ model User {
 enum Role {
   ADMIN
   AGENT
-}
-
-enum UserStatus {
-  ONLINE
-  BUSY
-  OFFLINE
 }
 
 model Conversation {
@@ -252,4 +246,26 @@ model AuditLog {
   @@index([companyId, timestamp])
   @@index([userId, timestamp])
   @@map("audit_logs")
+}
+
+model PasswordResetRequest {
+  id        String   @id @default(uuid())
+  companyId String
+  userId    String
+  reason    String   @db.Text
+  status    ResetStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@index([userId])
+  @@map("password_reset_requests")
+}
+
+enum ResetStatus {
+  PENDING
+  RESOLVED
 }

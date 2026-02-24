@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '@/hooks/useUsers';
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, usePendingPasswordResets, useResolvePasswordReset } from '@/hooks/useUsers';
 import { User, Role } from '@/types/user';
 import { toast } from 'sonner';
 import {
@@ -41,7 +41,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, UserX, UserCheck, Loader2 } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Loader2, AlertCircle } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function UsersPage() {
   const currentUser = useAuthStore((s) => s.user);
@@ -50,6 +52,8 @@ export default function UsersPage() {
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();
+  const { data: pendingResets } = usePendingPasswordResets();
+  const resolveReset = useResolvePasswordReset();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -137,6 +141,22 @@ export default function UsersPage() {
     setEditingUser(user);
   };
 
+  const handleResolveReset = async (requestId: string, userId: string) => {
+    try {
+      // Abre o modal de edição para esse usuário, para facilitar a troca de senha
+      const userToEdit = users?.find(u => u.id === userId);
+      if (userToEdit) {
+        openEditDialog(userToEdit);
+      }
+
+      // Resolve a notificação automaticamente
+      await resolveReset.mutateAsync(requestId);
+      toast.success('Solicitação marcada como resolvida.');
+    } catch (e: any) {
+      toast.error('Erro ao resolver solicitação');
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -151,6 +171,46 @@ export default function UsersPage() {
           Novo Usuario
         </Button>
       </div>
+
+      {isAdmin && pendingResets && pendingResets.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-red-800">
+                {pendingResets.length} solicitação(ões) de redefinição de senha
+              </h3>
+              <p className="text-sm text-red-700 mt-1">
+                Os seguintes usuários solicitaram ajuda por problemas no acesso. Altere a senha temporariamente e informe a eles.
+              </p>
+              <div className="mt-3 space-y-2">
+                {pendingResets.map((reset: any) => (
+                  <div key={reset.id} className="bg-white rounded p-3 border border-red-100 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{reset.user?.name} ({reset.user?.email})</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        <span className="font-semibold text-gray-700">Motivo:</span> {reset.reason}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Solicitado {formatDistanceToNow(new Date(reset.createdAt), { addSuffix: true, locale: ptBR })}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-red-200 text-red-700 hover:bg-red-50"
+                      onClick={() => handleResolveReset(reset.id, reset.userId)}
+                      disabled={resolveReset.isPending}
+                    >
+                      Alterar Senha
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

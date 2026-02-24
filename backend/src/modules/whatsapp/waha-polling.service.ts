@@ -23,6 +23,8 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private polling = false;
 
+  private readonly backendUrl: string;
+
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
@@ -40,6 +42,24 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
     this.wahaApiKey = this.configService.get<string>('WAHA_API_KEY') || '';
     this.wahaSession =
       this.configService.get<string>('WAHA_SESSION') || 'default';
+    this.backendUrl =
+      this.configService.get<string>('BACKEND_URL') ||
+      'http://192.168.10.156:4000';
+  }
+
+  /**
+   * Converte URL interna do WAHA (ex: http://localhost:3000/api/files/session/nome.oga)
+   * para URL do proxy no backend (ex: http://192.168.10.156:4000/api/files/session/nome.oga).
+   * O WAHA roda em Docker e usa porta interna diferente da externa.
+   */
+  private wahaUrlToProxyUrl(wahaUrl: string): string {
+    // WAHA format: /api/files/{session}/{filename}
+    const match = wahaUrl.match(/\/api\/files\/([^/]+)\/(.+)$/);
+    if (match) {
+      const [, session, fileName] = match;
+      return `${this.backendUrl}/api/files/${session}/${encodeURIComponent(fileName)}`;
+    }
+    return wahaUrl;
   }
 
   onModuleInit() {
@@ -172,7 +192,9 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
 
         if (msg.hasMedia && msg.media) {
           const mimetype = msg.media?.mimetype || '';
-          mediaUrl = msg.media?.url || undefined;
+          const rawUrl = msg.media?.url || undefined;
+          // Converte URL interna do WAHA para o proxy do backend
+          mediaUrl = rawUrl ? this.wahaUrlToProxyUrl(rawUrl) : undefined;
           if (mimetype.startsWith('image/')) {
             type = 'IMAGE';
             content = msg.body || '[Imagem]';
@@ -186,6 +208,24 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             type = 'DOCUMENT';
             content = msg.media?.filename || msg.body || '[Documento]';
           }
+        }
+
+        // Extract quoted message (reply context) if present
+        // WAHA envia: msg.hasQuotedMsg=true, msg.replyTo.body e msg._data.quotedMsg.body
+        const hasQuoted = msg.hasQuotedMsg || msg._data?.hasQuotedMsg || !!msg.replyTo?.body;
+        const replyBody = msg.replyTo?.body || msg._data?.quotedMsg?.body;
+        const replyType = msg._data?.quotedMsg?.type || msg.replyTo?._data?.type || 'chat';
+        const quotedStanzaId = msg._data?.quotedStanzaID;
+        const quotedParticipant = msg._data?.quotedParticipant?._serialized;
+        const msgFromMe = msg.from;
+        let quotedMsg: { id?: string; body?: string; type?: string; fromMe?: boolean } | undefined;
+        if (hasQuoted && replyBody) {
+          quotedMsg = {
+            id: quotedStanzaId,
+            body: replyBody,
+            type: replyType,
+            fromMe: quotedParticipant ? quotedParticipant !== msgFromMe : false,
+          };
         }
 
         this.logger.log(
@@ -264,6 +304,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             mediaUrl,
             chatId,
             contactProfile,
+            quotedMsg,
           );
           continue;
         }
@@ -300,6 +341,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             mediaUrl,
             chatId,
             contactProfile,
+            quotedMsg,
           );
           continue;
         }
@@ -322,6 +364,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             mediaUrl,
             chatId,
             contactProfile,
+            quotedMsg,
           );
           continue;
         }
@@ -336,6 +379,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           mediaUrl,
           chatId,
           contactProfile,
+          quotedMsg,
         );
       }
 

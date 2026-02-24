@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  reactStrictMode: false,
   output: "standalone",
   allowedDevOrigins: ["192.168.10.156"],
   images: {

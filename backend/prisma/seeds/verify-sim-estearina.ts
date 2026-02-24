@@ -38,7 +38,7 @@ async function main() {
         console.log(`\n   ${dept.name}:`);
         for (const user of deptUsers) {
           console.log(`      • ${user.name.padEnd(25)} (${user.email})`);
-          console.log(`        Status: ${user.onlineStatus} | Active: ${user.isActive ? '✓' : '✗'}`);
+          console.log(`        Ativo: ${user.isActive ? '✓' : '✗'}`);
         }
       }
     }

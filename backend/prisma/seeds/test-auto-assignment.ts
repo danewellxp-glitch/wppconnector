@@ -6,9 +6,9 @@ async function main() {
   try {
     console.log('\n' + '='.repeat(80));
     console.log('🧪 SIMULAÇÃO PRÁTICA: Atribuição Automática de Conversas');
+    console.log('   (Modelo WhatsApp — sem status online/offline)');
     console.log('='.repeat(80) + '\n');
 
-    // Limpar conversas previas
     const company = await prisma.company.findFirst({
       where: { name: 'SIM Estearina Indústria e Comércio Ltda' },
     });
@@ -22,16 +22,9 @@ async function main() {
       where: { companyId: company.id },
     });
 
-    // Garantir estado limpo: todos ONLINE
-    await prisma.user.updateMany({
-      where: { companyId: company.id },
-      data: { onlineStatus: 'ONLINE' },
-    });
-
-    console.log('📝 CENÁRIO 1: Cliente escolhe Comercial (com agentes online)');
+    console.log('📝 CENÁRIO 1: Cliente escolhe Comercial');
     console.log('-'.repeat(80));
 
-    // Criar conversa do cliente
     const conv1 = await prisma.conversation.create({
       data: {
         companyId: company.id,
@@ -43,15 +36,15 @@ async function main() {
     });
     console.log(`✓ Cliente criado: ${conv1.customerName} (${conv1.customerPhone})`);
 
-    // Simular: cliente escolhe 3 (Comercial)
     const comercialDept = await prisma.department.findFirst({
       where: { companyId: company.id, slug: 'comercial' },
     });
 
+    // No new model: all active agents are eligible regardless of any status
     const comercialAgents = await prisma.user.findMany({
       where: {
         departmentId: comercialDept?.id,
-        onlineStatus: { in: ['ONLINE', 'BUSY'] },
+        isActive: true,
       },
     });
 
@@ -73,15 +66,12 @@ async function main() {
       console.log(`  Status: ASSIGNED ✅\n`);
     }
 
-    console.log('📝 CENÁRIO 2: Comercial offline, cliente redireciona AUTOMATICAMENTE');
+    console.log('📝 CENÁRIO 2: Setor sem agentes — fallback para Admin');
     console.log('-'.repeat(80));
 
-    // Marcar comercial como OFFLINE
-    await prisma.user.updateMany({
-      where: { departmentId: comercialDept?.id },
-      data: { onlineStatus: 'OFFLINE' },
+    const adminDept = await prisma.department.findFirst({
+      where: { companyId: company.id, isRoot: true },
     });
-    console.log(`✓ Todos agentes do Comercial marcados como OFFLINE`);
 
     const conv2 = await prisma.conversation.create({
       data: {
@@ -94,15 +84,10 @@ async function main() {
     });
     console.log(`✓ Novo cliente: ${conv2.customerName} (${conv2.customerPhone})`);
 
-    // Simular: cliente escolhe 3 (Comercial), mas está offline
-    const adminDept = await prisma.department.findFirst({
-      where: { companyId: company.id, isRoot: true },
-    });
-
     const adminAgents = await prisma.user.findMany({
       where: {
         departmentId: adminDept?.id,
-        onlineStatus: { in: ['ONLINE', 'BUSY'] },
+        isActive: true,
       },
     });
 
@@ -118,24 +103,15 @@ async function main() {
           assignedAt: new Date(),
         },
       });
-      console.log(`✓ FALLBACK executado automaticamente!`);
+      console.log(`✓ FALLBACK executado (nenhum agente no setor original)!`);
       console.log(`  Conversa redirecionada para: ${adminAgent.name}`);
       console.log(`  Departamento: ${adminDept?.name} (setor raiz)`);
-      console.log(`  Motivo: Comercial offline`);
       console.log(`  Status: ASSIGNED ✅\n`);
     }
 
     console.log('📝 CENÁRIO 3: Load Balancing - distribuição equilibrada');
     console.log('-'.repeat(80));
 
-    // Reativar comercial
-    await prisma.user.updateMany({
-      where: { departmentId: comercialDept?.id },
-      data: { onlineStatus: 'ONLINE' },
-    });
-    console.log(`✓ Agentes do Comercial voltaram ONLINE`);
-
-    // Criar vários clientes
     const customers = [
       { phone: '+5541998887777', name: 'Cliente A - Pedido' },
       { phone: '+5541998887778', name: 'Cliente B - Cotação' },
@@ -144,7 +120,7 @@ async function main() {
     ];
 
     const freshComercialAgents = await prisma.user.findMany({
-      where: { departmentId: comercialDept?.id },
+      where: { departmentId: comercialDept?.id, isActive: true },
       select: { id: true, name: true, email: true },
     });
 
@@ -163,11 +139,10 @@ async function main() {
         },
       });
 
-      // Get agents
       const agentsWithLoad = await prisma.user.findMany({
         where: {
           departmentId: comercialDept?.id,
-          onlineStatus: { in: ['ONLINE', 'BUSY'] },
+          isActive: true,
         },
       });
 
@@ -224,11 +199,6 @@ async function main() {
       });
     }
 
-    // Verificação da lógica
-    console.log('\n' + '='.repeat(80));
-    console.log('✅ VERIFICAÇÃO');
-    console.log('='.repeat(80) + '\n');
-
     const assigned = allConversations.filter((c) => c.flowState === 'ASSIGNED');
     const loadBalanced = freshComercialAgents.map((a) => ({
       agent: a.name,
@@ -237,6 +207,9 @@ async function main() {
       ).length,
     }));
 
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ VERIFICAÇÃO');
+    console.log('='.repeat(80) + '\n');
     console.log(`✅ Conversas atribuídas automaticamente: ${assigned.length}/${allConversations.length}`);
     console.log(`✅ Fallback para Administrativo: ${byDept['Administrativo']?.length || 0} conversa(s)`);
     console.log(`✅ Load balancing (Comercial):`);

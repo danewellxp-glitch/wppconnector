@@ -19,7 +19,23 @@ export class WahaWebhookController {
     private flowEngineService: FlowEngineService,
     private departmentRoutingService: DepartmentRoutingService,
     private conversationRoutingService: ConversationRoutingService,
-  ) {}
+  ) { }
+
+  /**
+   * Converte URL interna do WAHA (http://localhost:3000/api/files/session/nome)
+   * para URL do proxy no backend (http://host:4000/api/files/session/nome).
+   */
+  private wahaUrlToProxyUrl(wahaUrl: string): string {
+    // WAHA format: /api/files/{session}/{filename}
+    const match = wahaUrl.match(/\/api\/files\/([^/]+)\/(.+)$/);
+    if (match) {
+      const [, session, fileName] = match;
+      const backendUrl =
+        process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+      return `${backendUrl}/api/files/${session}/${encodeURIComponent(fileName)}`;
+    }
+    return wahaUrl;
+  }
 
   @Post()
   @HttpCode(200)
@@ -109,7 +125,34 @@ export class WahaWebhookController {
 
     if (payload.hasMedia && payload.media) {
       const mimetype = payload.media.mimetype || '';
-      mediaUrl = payload.media.url || undefined;
+      const originalMediaUrl = payload.media.url || undefined;
+      const base64Data = payload.media.data;
+
+      if (base64Data) {
+        // Caso 1: WAHA enviou o arquivo em base64 — salva localmente
+        try {
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = mimetype.split('/')[1]?.split(';')[0] || 'bin';
+          const uniqueFilename = `${Date.now()}_${require('crypto').randomUUID().slice(0, 8)}.${ext}`;
+          const uploadsDir = require('path').join(process.cwd(), 'uploads');
+          if (!require('fs').existsSync(uploadsDir)) {
+            require('fs').mkdirSync(uploadsDir, { recursive: true });
+          }
+          require('fs').writeFileSync(
+            require('path').join(uploadsDir, uniqueFilename),
+            buffer,
+          );
+          const backendUrl =
+            process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+          mediaUrl = `${backendUrl}/uploads/${uniqueFilename}`;
+        } catch (error) {
+          this.logger.error('Failed to save base64 media', error);
+        }
+      } else if (originalMediaUrl) {
+        // Caso 2: WAHA enviou apenas URL — usa o proxy do backend
+        // (evita expor URL interna do Docker ao frontend)
+        mediaUrl = this.wahaUrlToProxyUrl(originalMediaUrl);
+      }
 
       if (mimetype.startsWith('image/')) {
         type = 'IMAGE';
@@ -127,6 +170,19 @@ export class WahaWebhookController {
     } else {
       content = payload.body || '';
       type = 'TEXT';
+    }
+
+    // Extract quoted message (reply context) if present
+    // WAHA envia: payload.hasQuotedMsg=true, payload.replyTo.body e payload._data.quotedMsg.body
+    const hasQuoted = payload.hasQuotedMsg || payload._data?.hasQuotedMsg || !!payload.replyTo?.body;
+    const replyBody = payload.replyTo?.body || payload._data?.quotedMsg?.body;
+    const replyType = payload._data?.quotedMsg?.type || payload.replyTo?._data?.type || 'chat';
+    const quotedStanzaId = payload._data?.quotedStanzaID;
+    const quotedParticipant = payload._data?.quotedParticipant?._serialized;
+    const fromMe = quotedParticipant ? quotedParticipant !== payload.from : false;
+    let quotedMsg: { id?: string; body?: string; type?: string; fromMe?: boolean } | undefined;
+    if (hasQuoted && replyBody) {
+      quotedMsg = { id: quotedStanzaId, body: replyBody, type: replyType, fromMe };
     }
 
     // Find or create conversation (without saving message yet)
@@ -261,6 +317,7 @@ export class WahaWebhookController {
         mediaUrl,
         chatId,
         contactProfile,
+        quotedMsg,
       );
       return;
     }
@@ -314,6 +371,7 @@ export class WahaWebhookController {
         mediaUrl,
         chatId,
         contactProfile,
+        quotedMsg,
       );
       return; // Don't process further when responding to routing suggestion
     }
@@ -350,7 +408,7 @@ export class WahaWebhookController {
               sendTo,
               `✅ Um atendente do setor * ${deptName} * está disponível!\n\nConectando com * ${agent.name}*... 😊`,
             )
-            .catch(() => {});
+            .catch(() => { });
         }
         // Se ainda sem agentes: salva a mensagem silenciosamente, sem reenviar "indisponíveis"
       }
@@ -365,6 +423,7 @@ export class WahaWebhookController {
         mediaUrl,
         chatId,
         contactProfile,
+        quotedMsg,
       );
 
       this.whatsappService
@@ -373,7 +432,7 @@ export class WahaWebhookController {
           company.whatsappPhoneNumberId,
           whatsappMessageId,
         )
-        .catch(() => {});
+        .catch(() => { });
       return;
     }
 
@@ -388,6 +447,7 @@ export class WahaWebhookController {
       mediaUrl,
       chatId,
       contactProfile,
+      quotedMsg,
     );
 
     // Auto mark as read via WAHA
@@ -397,7 +457,7 @@ export class WahaWebhookController {
         company.whatsappPhoneNumberId,
         whatsappMessageId,
       )
-      .catch(() => {});
+      .catch(() => { });
   }
 
   private async handleStatusUpdate(payload: any) {

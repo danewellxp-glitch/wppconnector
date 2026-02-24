@@ -20,7 +20,7 @@ export class ConversationsService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private moduleRef: ModuleRef,
-  ) {}
+  ) { }
 
   private getWebsocketGateway(): WebsocketGateway | null {
     try {
@@ -132,6 +132,215 @@ export class ConversationsService {
     return conversation;
   }
 
+  async getContacts(
+    companyId: string,
+    query?: string,
+    take = 50,
+    skip = 0,
+    user?: { role: string; departmentId?: string | null }
+  ) {
+    const where: any = { companyId };
+
+    if (user && user.role !== 'ADMIN' && user.departmentId) {
+      // Find the root department for this company
+      const rootDept = await this.prisma.department.findFirst({
+        where: { companyId, isRoot: true },
+      });
+
+      if (rootDept) {
+        // Agent can see:
+        // 1) Contacts in their own department
+        // 2) Contacts in the Root department that are unassigned (Offline Queue)
+        where.OR = [
+          { departmentId: user.departmentId },
+          {
+            departmentId: rootDept.id,
+            assignedUserId: null,
+            status: 'OPEN', // Only pending offline queue
+          }
+        ];
+      } else {
+        where.departmentId = user.departmentId;
+      }
+    }
+
+    if (query) {
+      const queryFilter = [
+        { customerName: { contains: query, mode: 'insensitive' } },
+        { customerPhone: { contains: query, mode: 'insensitive' } },
+      ];
+
+      if (where.OR) {
+        // If we already have an OR condition from department filtering, we need an AND
+        where.AND = [{ OR: queryFilter }];
+      } else {
+        where.OR = queryFilter;
+      }
+    }
+
+    return this.prisma.conversation.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take,
+      skip,
+      include: {
+        department: { select: { id: true, name: true, color: true } },
+        assignedUser: { select: { id: true, name: true } },
+        messages: {
+          orderBy: { sentAt: 'desc' },
+          take: 1,
+          select: { content: true, sentAt: true }
+        }
+      }
+    });
+  }
+
+  async createContactAndStartChat(companyId: string, customerName: string, customerPhone: string, userId: string) {
+    let conv = await this.prisma.conversation.findUnique({
+      where: { companyId_customerPhone: { companyId, customerPhone } },
+    });
+
+    const agent = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true, name: true }
+    });
+
+    if (conv) {
+      if (conv.status === 'OPEN' || conv.status === 'ASSIGNED') {
+        throw new BadRequestException('Já existe um atendimento em andamento para este número.');
+      }
+
+      // Update existing conversation
+      await this.prisma.assignment.updateMany({
+        where: { conversationId: conv.id, unassignedAt: null },
+        data: { unassignedAt: new Date() },
+      });
+
+      await this.prisma.assignment.create({
+        data: { conversationId: conv.id, userId },
+      });
+
+      conv = await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: {
+          customerName: customerName || conv.customerName,
+          status: 'ASSIGNED',
+          flowState: 'ASSIGNED',
+          assignedUserId: userId,
+          assignedAt: new Date(),
+          departmentId: agent?.departmentId || null,
+          routedAt: new Date(),
+          timeoutAt: null,
+          unreadCount: 0,
+        }
+      });
+
+    } else {
+      // Create new conversation
+      conv = await this.prisma.conversation.create({
+        data: {
+          companyId,
+          customerPhone,
+          customerName,
+          status: 'ASSIGNED',
+          flowState: 'ASSIGNED',
+          assignedUserId: userId,
+          assignedAt: new Date(),
+          departmentId: agent?.departmentId || null,
+          routedAt: new Date(),
+        }
+      });
+
+      await this.prisma.assignment.create({
+        data: { conversationId: conv.id, userId },
+      });
+    }
+
+    const gateway = this.getWebsocketGateway();
+    if (gateway && agent?.departmentId) {
+      gateway.emitToDepartment(agent.departmentId, 'conversation-assigned', {
+        conversationId: conv.id,
+        conversation: conv,
+        agentName: agent.name,
+      });
+    }
+
+    return conv;
+  }
+
+  async startChatFromExisting(conversationId: string, userId: string, companyId: string) {
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: conversationId }
+    });
+
+    if (!conv || conv.companyId !== companyId) {
+      throw new NotFoundException('Conversa não encontrada');
+    }
+
+    if (conv.status === 'OPEN' || conv.status === 'ASSIGNED') {
+      throw new BadRequestException('Esta conversa já está em andamento com um atendente ou na fila.');
+    }
+
+    const agent = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true, name: true }
+    });
+
+    await this.prisma.assignment.updateMany({
+      where: { conversationId: conv.id, unassignedAt: null },
+      data: { unassignedAt: new Date() },
+    });
+
+    await this.prisma.assignment.create({
+      data: { conversationId: conv.id, userId },
+    });
+
+    const updated = await this.prisma.conversation.update({
+      where: { id: conv.id },
+      data: {
+        status: 'ASSIGNED',
+        flowState: 'ASSIGNED',
+        assignedUserId: userId,
+        assignedAt: new Date(),
+        departmentId: agent?.departmentId || conv.departmentId,
+        routedAt: new Date(),
+        timeoutAt: null,
+        unreadCount: 0,
+      }
+    });
+
+    const gateway = this.getWebsocketGateway();
+    if (gateway && updated.departmentId) {
+      gateway.emitToDepartment(updated.departmentId, 'conversation-assigned', {
+        conversationId: updated.id,
+        conversation: updated,
+        agentName: agent?.name,
+      });
+    }
+
+    return updated;
+  }
+
+  /**
+   * Converte URLs internas do WAHA (localhost:3000 ou host:3101) para o proxy
+   * do backend, garantindo que o frontend sempre receba URLs acessíveis.
+   * Mensagens salvas antes da implementação do proxy são corrigidas aqui.
+   */
+  private normalizeMediaUrl(url: string | null): string | null {
+    if (!url) return url;
+    const backendUrl =
+      process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+    // Already our backend URL — return as-is (avoid double-processing)
+    if (url.startsWith(backendUrl)) return url;
+    // WAHA format: http://localhost:3000/api/files/{session}/{filename}
+    const match = url.match(/\/api\/files\/([^/]+)\/(.+)$/);
+    if (match) {
+      const [, session, fileName] = match;
+      return `${backendUrl}/api/files/${session}/${encodeURIComponent(fileName)}`;
+    }
+    return url;
+  }
+
   async getMessages(
     conversationId: string,
     take = 50,
@@ -148,7 +357,7 @@ export class ConversationsService {
         throw new ForbiddenException('Acesso negado a esta conversa');
       }
     }
-    return this.prisma.message.findMany({
+    const messages = await this.prisma.message.findMany({
       where: { conversationId },
       orderBy: { sentAt: 'desc' },
       take,
@@ -162,6 +371,12 @@ export class ConversationsService {
         },
       },
     });
+
+    // Normaliza mediaUrl para mensagens antigas que guardam URL interna do WAHA
+    return messages.map((msg) => ({
+      ...msg,
+      mediaUrl: this.normalizeMediaUrl(msg.mediaUrl),
+    }));
   }
 
   async assign(conversationId: string, userId: string) {
@@ -252,6 +467,7 @@ export class ConversationsService {
       departmentId,
       assignedUserId: null,
       assignedAt: null,
+      status: 'OPEN',
       flowState: 'DEPARTMENT_SELECTED',
       routedAt: new Date(),
       timeoutAt: new Date(Date.now() + dept.responseTimeoutMinutes * 60 * 1000),

@@ -1,13 +1,18 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket';
+import {
+  connectSocket,
+  disconnectSocket,
+  getSocket,
+  onConnectionStatusChange,
+  type ConnectionStatus,
+} from '@/lib/socket';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useNotificationStore } from '@/stores/notificationStore';
-import apiClient from '@/lib/api-client';
 
 type SocketInstance = ReturnType<typeof connectSocket>;
 
@@ -19,6 +24,8 @@ export function useSocket() {
   const selectedConversationId = useChatStore((s) => s.selectedConversationId);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const socketRef = useRef<SocketInstance | null>(null);
+  const [socketInstance, setSocketInstance] = useState<SocketInstance | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -26,11 +33,29 @@ export function useSocket() {
 
     const socket = connectSocket(token);
     socketRef.current = socket;
+    setSocketInstance(socket);
 
-    socket.on('connect', () => {
-      socket.emit('agent-online');
-      // Also call REST API to guarantee DB update (socket event alone can be missed)
-      apiClient.patch('/users/me/status', { status: 'ONLINE' }).catch(() => { });
+    // Escuta mudanças de status da conexão (conectado, reconectando, falhou)
+    const unsubscribeStatus = onConnectionStatusChange((status) => {
+      setConnectionStatus(status);
+      if (status === 'failed') {
+        toast.error('Conexão com o servidor perdida. Recarregue a página para reconectar.', {
+          duration: Infinity,
+          id: 'socket-connection-failed',
+          action: {
+            label: 'Recarregar',
+            onClick: () => window.location.reload(),
+          },
+        });
+      } else if (status === 'reconnecting') {
+        toast.loading('Reconectando ao servidor...', {
+          id: 'socket-reconnecting',
+          duration: 4000,
+        });
+      } else if (status === 'connected') {
+        toast.dismiss('socket-connection-failed');
+        toast.dismiss('socket-reconnecting');
+      }
     });
 
     socket.on('message-received', (data: { message: any; conversationId: string }) => {
@@ -70,10 +95,6 @@ export function useSocket() {
 
     socket.on('conversation-transferred', () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-    });
-
-    socket.on('agent-status-changed', () => {
-      queryClient.invalidateQueries({ queryKey: ['department-agents'] });
     });
 
     // 🔔 Novo evento de conversa recebida no setor
@@ -120,29 +141,14 @@ export function useSocket() {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     });
 
-    const heartbeatInterval = setInterval(() => {
-      getSocket()?.emit('heartbeat');
-    }, 30000); // 30s — must be < 120s timeout
-
-    const handleBeforeUnload = () => {
-      getSocket()?.emit('agent-offline');
-    };
-    if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', handleBeforeUnload);
-    }
-
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      clearInterval(heartbeatInterval);
-      socket.emit('agent-offline');
-      socket.off('connect');
+      unsubscribeStatus();
       socket.off('message-received');
       socket.off('message-sent');
       socket.off('message-status-updated');
       socket.off('conversation-assigned');
       socket.off('conversation-queued');
       socket.off('conversation-transferred');
-      socket.off('agent-status-changed');
       socket.off('new_conversation');
       socket.off('conversation_transferred');
       disconnectSocket();
@@ -166,7 +172,8 @@ export function useSocket() {
   };
 
   return {
-    socket: socketRef.current,
+    socket: socketInstance,
+    connectionStatus,
     joinConversation,
     leaveConversation,
     emitTypingStart,

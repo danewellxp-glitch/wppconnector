@@ -36,7 +36,7 @@ export interface Conversation {
   assignedUserId?: string | null;
   assignedUser?: { id: string; name: string; email?: string } | null;
   flowState?: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   assignments?: ConversationAssignment[];
   messages?: Message[];
 }

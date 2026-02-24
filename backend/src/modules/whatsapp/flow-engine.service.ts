@@ -119,6 +119,10 @@ export class FlowEngineService {
   }
 
   isBusinessHours(): boolean {
+    // TODO: Desabilitado temporariamente para testes - sempre retorna true
+    return true;
+    
+    /*
     const now = new Date();
     // Converter a hora atual do servidor para UTC-3 (Horário de Brasília) para segurança
     const spTime = new Date(
@@ -135,6 +139,7 @@ export class FlowEngineService {
       }
     }
     return false;
+    */
   }
 
   getOutOfHoursMessage(): string {

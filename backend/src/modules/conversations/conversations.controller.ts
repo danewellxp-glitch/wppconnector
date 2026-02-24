@@ -21,7 +21,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @Controller('conversations')
 @UseGuards(JwtAuthGuard)
 export class ConversationsController {
-  constructor(private conversationsService: ConversationsService) {}
+  constructor(private conversationsService: ConversationsService) { }
 
   @Get()
   findAll(
@@ -29,6 +29,35 @@ export class ConversationsController {
     @Query('status') status?: ConversationStatus,
   ) {
     return this.conversationsService.findAll(user.companyId, status, user);
+  }
+
+  @Get('contacts')
+  getContacts(
+    @CurrentUser() user: any,
+    @Query('q') query?: string,
+    @Query('take') take?: string,
+    @Query('skip') skip?: string,
+  ) {
+    return this.conversationsService.getContacts(
+      user.companyId,
+      query,
+      take ? parseInt(take, 10) : 50,
+      skip ? parseInt(skip, 10) : 0,
+    );
+  }
+
+  @Post('contacts')
+  createContactAndStartChat(
+    @CurrentUser() user: any,
+    @Body('customerName') customerName: string,
+    @Body('customerPhone') customerPhone: string,
+  ) {
+    return this.conversationsService.createContactAndStartChat(
+      user.companyId,
+      customerName,
+      customerPhone,
+      user.id,
+    );
   }
 
   @Get(':id')
@@ -59,6 +88,18 @@ export class ConversationsController {
   @Post(':id/unassign')
   unassign(@Param('id') id: string) {
     return this.conversationsService.unassign(id);
+  }
+
+  @Post(':id/start')
+  startChatFromExisting(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.conversationsService.startChatFromExisting(
+      id,
+      user.id,
+      user.companyId,
+    );
   }
 
   @Post(':id/transfer')

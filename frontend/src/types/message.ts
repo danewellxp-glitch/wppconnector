@@ -37,4 +37,13 @@ export interface Message {
   sentAt: string;
   deliveredAt?: string;
   readAt?: string;
+  metadata?: {
+    quotedMsg?: {
+      id?: string;
+      body?: string;
+      type?: string;
+      fromMe?: boolean;
+    };
+    [key: string]: unknown;
+  };
 }

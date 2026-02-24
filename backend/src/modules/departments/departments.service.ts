@@ -42,8 +42,6 @@ export class DepartmentsService {
         id: true,
         name: true,
         email: true,
-        onlineStatus: true,
-        lastHeartbeatAt: true,
         _count: {
           select: {
             assignedConversations: {

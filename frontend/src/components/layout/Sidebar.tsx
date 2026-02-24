@@ -1,12 +1,13 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { MessageSquare, BarChart3, Users, Settings, Shield } from 'lucide-react';
+import { MessageSquare, BarChart3, Users, Settings, Shield, Contact2 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
   { href: '/dashboard', icon: MessageSquare, label: 'Conversas' },
+  { href: '/dashboard/contacts', icon: Contact2, label: 'Contatos' },
   { href: '/dashboard/metrics', icon: BarChart3, label: 'Metricas' },
   { href: '/dashboard/users', icon: Users, label: 'Usuarios' },
   { href: '/dashboard/audit', icon: Shield, label: 'Auditoria' },

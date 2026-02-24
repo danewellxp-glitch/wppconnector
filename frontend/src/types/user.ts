@@ -3,8 +3,6 @@ export enum Role {
   AGENT = 'AGENT',
 }
 
-export type UserStatus = 'ONLINE' | 'BUSY' | 'OFFLINE';
-
 export interface User {
   id: string;
   email: string;
@@ -13,7 +11,6 @@ export interface User {
   companyId: string;
   departmentId?: string | null;
   department?: { name: string } | null;
-  onlineStatus?: UserStatus;
   isActive: boolean;
 }
 
