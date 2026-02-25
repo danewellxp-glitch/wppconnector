@@ -128,13 +128,22 @@ export class WahaWebhookController {
       const originalMediaUrl = payload.media.url || undefined;
       const base64Data = payload.media.data;
 
+      let folderType = 'documents';
+      if (mimetype.startsWith('image/')) folderType = 'images';
+      else if (mimetype.startsWith('audio/')) folderType = 'audios';
+      else if (mimetype.startsWith('video/')) folderType = 'videos';
+
+      const now = new Date();
+      const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const subPath = `${folderType}/${yearMonth}`;
+
       if (base64Data) {
         // Caso 1: WAHA enviou o arquivo em base64 — salva localmente
         try {
           const buffer = Buffer.from(base64Data, 'base64');
           const ext = mimetype.split('/')[1]?.split(';')[0] || 'bin';
           const uniqueFilename = `${Date.now()}_${require('crypto').randomUUID().slice(0, 8)}.${ext}`;
-          const uploadsDir = require('path').join(process.cwd(), 'uploads');
+          const uploadsDir = require('path').join(process.cwd(), 'uploads', folderType, yearMonth);
           if (!require('fs').existsSync(uploadsDir)) {
             require('fs').mkdirSync(uploadsDir, { recursive: true });
           }
@@ -144,14 +153,41 @@ export class WahaWebhookController {
           );
           const backendUrl =
             process.env.BACKEND_URL || 'http://192.168.10.156:4000';
-          mediaUrl = `${backendUrl}/uploads/${uniqueFilename}`;
+          mediaUrl = `${backendUrl}/uploads/${subPath}/${uniqueFilename}`;
         } catch (error) {
           this.logger.error('Failed to save base64 media', error);
         }
       } else if (originalMediaUrl) {
-        // Caso 2: WAHA enviou apenas URL — usa o proxy do backend
-        // (evita expor URL interna do Docker ao frontend)
-        mediaUrl = this.wahaUrlToProxyUrl(originalMediaUrl);
+        // Caso 2: WAHA enviou URL. Em vez de proxy, vamos baixar e salvar o arquivo
+        // para garantir que replays funcionem corretamente e a URL não expire.
+        try {
+          // Se for uma URL do WAHA, ele precisa do acesso (e pode precisar do backend rodando)
+          // Mas como o WAHA está na mesma rede/máquina, vamos tentar baixar o buffer
+          const axios = require('axios');
+          const response = await axios.get(originalMediaUrl, { responseType: 'arraybuffer' });
+          const buffer = Buffer.from(response.data);
+
+          let ext = mimetype.split('/')[1]?.split(';')[0];
+          // Tratar extensão de alguns áudios de whatsapp
+          if (!ext || ext === 'ogg; codecs=opus') ext = 'ogg';
+
+          const uniqueFilename = `${Date.now()}_${require('crypto').randomUUID().slice(0, 8)}.${ext}`;
+          const uploadsDir = require('path').join(process.cwd(), 'uploads', folderType, yearMonth);
+          if (!require('fs').existsSync(uploadsDir)) {
+            require('fs').mkdirSync(uploadsDir, { recursive: true });
+          }
+          require('fs').writeFileSync(
+            require('path').join(uploadsDir, uniqueFilename),
+            buffer,
+          );
+          const backendUrl =
+            process.env.BACKEND_URL || 'http://192.168.10.156:4000';
+          mediaUrl = `${backendUrl}/uploads/${subPath}/${uniqueFilename}`;
+        } catch (error) {
+          this.logger.error(`Failed to download and save media from ${originalMediaUrl}`, error.message);
+          // Fallback para o proxy se o download falhar
+          mediaUrl = this.wahaUrlToProxyUrl(originalMediaUrl);
+        }
       }
 
       if (mimetype.startsWith('image/')) {

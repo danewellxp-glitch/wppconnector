@@ -193,8 +193,38 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         if (msg.hasMedia && msg.media) {
           const mimetype = msg.media?.mimetype || '';
           const rawUrl = msg.media?.url || undefined;
-          // Converte URL interna do WAHA para o proxy do backend
-          mediaUrl = rawUrl ? this.wahaUrlToProxyUrl(rawUrl) : undefined;
+
+          let folderType = 'documents';
+          if (mimetype.startsWith('image/')) folderType = 'images';
+          else if (mimetype.startsWith('audio/')) folderType = 'audios';
+          else if (mimetype.startsWith('video/')) folderType = 'videos';
+
+          const now = new Date();
+          const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const subPath = `${folderType}/${yearMonth}`;
+
+          // Converte URL interna do WAHA para o proxy do backend ou salva localmente
+          if (rawUrl) {
+            try {
+              const response = await axios.get(rawUrl, { responseType: 'arraybuffer' });
+              const buffer = Buffer.from(response.data);
+              let ext = mimetype.split('/')[1]?.split(';')[0];
+              if (!ext || ext === 'ogg; codecs=opus') ext = 'ogg';
+
+              const uniqueFilename = `${Date.now()}_${require('crypto').randomUUID().slice(0, 8)}.${ext}`;
+              const uploadsDir = require('path').join(process.cwd(), 'uploads', folderType, yearMonth);
+              if (!require('fs').existsSync(uploadsDir)) {
+                require('fs').mkdirSync(uploadsDir, { recursive: true });
+              }
+              require('fs').writeFileSync(require('path').join(uploadsDir, uniqueFilename), buffer);
+              mediaUrl = `${this.backendUrl}/uploads/${subPath}/${uniqueFilename}`;
+            } catch (error) {
+              this.logger.error(`Failed to download and save media from ${rawUrl}`, error.message);
+              mediaUrl = this.wahaUrlToProxyUrl(rawUrl); // fallback
+            }
+          } else {
+            mediaUrl = undefined;
+          }
           if (mimetype.startsWith('image/')) {
             type = 'IMAGE';
             content = msg.body || '[Imagem]';

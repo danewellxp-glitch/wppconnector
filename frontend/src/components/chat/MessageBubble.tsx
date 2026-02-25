@@ -14,6 +14,7 @@ import {
   Bot,
   Download,
 } from 'lucide-react';
+import { CustomAudioPlayer } from './CustomAudioPlayer';
 
 function StatusIcon({ status }: { status: MessageStatus }) {
   switch (status) {
@@ -90,7 +91,7 @@ function MediaContent({ message }: { message: Message }) {
     case MessageType.AUDIO:
       return message.mediaUrl ? (
         <div className="flex items-center gap-2 mb-1 w-full">
-          <audio controls src={message.mediaUrl} className="flex-1 h-10 min-w-0" />
+          <CustomAudioPlayer src={message.mediaUrl} isOutbound={message.direction === Direction.OUTBOUND} />
           <DownloadButton />
         </div>
       ) : (
