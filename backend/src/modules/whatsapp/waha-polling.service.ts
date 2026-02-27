@@ -206,7 +206,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           // Converte URL interna do WAHA para o proxy do backend ou salva localmente
           if (rawUrl) {
             try {
-              const response = await axios.get(rawUrl, { responseType: 'arraybuffer' });
+              const response = await axios.get(rawUrl, { responseType: 'arraybuffer', headers: this.wahaHeaders() });
               const buffer = Buffer.from(response.data);
               let ext = mimetype.split('/')[1]?.split(';')[0];
               if (!ext || ext === 'ogg; codecs=opus') ext = 'ogg';

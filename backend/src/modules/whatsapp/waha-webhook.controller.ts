@@ -164,7 +164,9 @@ export class WahaWebhookController {
           // Se for uma URL do WAHA, ele precisa do acesso (e pode precisar do backend rodando)
           // Mas como o WAHA está na mesma rede/máquina, vamos tentar baixar o buffer
           const axios = require('axios');
-          const response = await axios.get(originalMediaUrl, { responseType: 'arraybuffer' });
+          const wahaApiKey = process.env.WAHA_API_KEY || '';
+          const wahaHeaders = wahaApiKey ? { 'X-Api-Key': wahaApiKey } : {};
+          const response = await axios.get(originalMediaUrl, { responseType: 'arraybuffer', headers: wahaHeaders });
           const buffer = Buffer.from(response.data);
 
           let ext = mimetype.split('/')[1]?.split(';')[0];
