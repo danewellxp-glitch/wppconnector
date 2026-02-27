@@ -25,7 +25,7 @@ services:
       - wpp-network
 
   waha:
-    image: devlikeapro/waha-plus
+    image: devlikeapro/waha-plus:latest
     container_name: wpp-waha
     ports:
       - "3101:3000"
@@ -36,6 +36,7 @@ services:
       - WHATSAPP_HOOK_URL=http://192.168.10.156:4000/webhooks/waha
       - WHATSAPP_HOOK_EVENTS=message,message.any,message.ack
       - WHATSAPP_START_SESSION=default
+      - WHATSAPP_DEFAULT_ENGINE=WEBJS
     volumes:
       - waha_sessions:/app/.sessions
     networks:

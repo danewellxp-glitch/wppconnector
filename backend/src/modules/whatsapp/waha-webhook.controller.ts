@@ -89,13 +89,56 @@ export class WahaWebhookController {
       return;
     }
 
-    // Resolve LID to real phone number via WAHA contacts API
+    // Resolve LID to real phone number
     let customerPhone = chatId;
     let contactProfile: any = null;
 
-    const contactInfo = await this.whatsappService.getContactInfo(chatId);
+    // --- Nova engine de resolução do @lid ---
+    if (chatId.includes('@lid')) {
+      this.logger.log(`[WAHA] Tentando resolver @lid: ${chatId}`);
+
+      // 1 & 2. Tentar via WAHA API (Endpoints diretos e Contacts)
+      const resolvedFromApi = await this.whatsappService.resolveLid(chatId);
+
+      if (resolvedFromApi) {
+        customerPhone = resolvedFromApi;
+      } else {
+        // 3. Fallback do Banco de Dados
+        const previousConv = await this.prisma.conversation.findFirst({
+          where: {
+            companyId: company.id,
+            customerPhone: chatId, // Procurando onde o lid foi salvo como customerPhone
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        if (previousConv && previousConv.customerPhone && !previousConv.customerPhone.includes('@lid')) {
+          this.logger.log(`[WAHA] @lid resolvido via Banco de Dados: ${chatId} -> ${previousConv.customerPhone}`);
+          customerPhone = previousConv.customerPhone;
+        } else {
+          // Tentativa B: Procurar em metadata
+          const metaConv = await this.prisma.conversation.findFirst({
+            where: {
+              companyId: company.id,
+              metadata: { path: ['chatId'], equals: chatId }
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+
+          if (metaConv && metaConv.customerPhone && !metaConv.customerPhone.includes('@lid')) {
+            this.logger.log(`[WAHA] @lid resolvido via MetaData BD: ${chatId} -> ${metaConv.customerPhone}`);
+            customerPhone = metaConv.customerPhone;
+          } else {
+            this.logger.warn(`[WAHA] ALERTA: Não foi possível resolver o @lid ${chatId}. Mensagem será salva com ID original.`);
+          }
+        }
+      }
+    }
+
+    const contactInfo = await this.whatsappService.getContactInfo(customerPhone === chatId ? chatId : `${customerPhone}@c.us`);
     if (contactInfo?.number) {
-      customerPhone = contactInfo.number;
+      // Se não era lid, ou se conseguimos pegar info do número resolvido
+      if (customerPhone === chatId) customerPhone = contactInfo.number;
       contactProfile = {
         pushname: contactInfo.pushname,
         name: contactInfo.name,
@@ -105,6 +148,9 @@ export class WahaWebhookController {
       this.logger.log(
         `Resolved ${chatId} → ${customerPhone} (${contactInfo.pushname || 'no name'})`,
       );
+    } else if (customerPhone !== chatId) {
+      // Conseguimos resolver o LID, mas o getContactInfo falhou no novo número. Tudo bem.
+      this.logger.log(`Resolved ${chatId} → ${customerPhone} (sem perfil na agenda)`);
     }
 
     const whatsappMessageId =
@@ -287,7 +333,7 @@ export class WahaWebhookController {
         }
 
         // Sem sugestão anterior: verificar horário comercial
-        if (!this.flowEngineService.isBusinessHours()) {
+        if (!this.flowEngineService.isBusinessHours(company)) {
           this.logger.log(
             `[FLOW] Out of hours for ${customerPhone}. Sending offline message...`,
           );

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
@@ -129,6 +129,61 @@ export class WhatsappService {
     }
   }
 
+  /**
+   * Fetch all contacts from WAHA `/api/contacts/all`.
+   * Note: Some engines (e.g. WWebJS) may throw a 500 error internally 
+   * if the user's phone has corrupted contacts. This method catches that.
+   */
+  async getContacts(): Promise<{ id: string; name: string | null; pushname: string | null; number: string | null; isBusiness: boolean }[]> {
+    if (!this.isWaha()) {
+      throw new Error('Contact sync is only supported with WAHA provider');
+    }
+
+    try {
+      this.logger.log(`[WAHA] Fetching all contacts...`);
+      const response = await axios.get(`${this.wahaApiUrl}/api/contacts/all`, {
+        params: { session: this.wahaSession },
+        headers: this.wahaHeaders(),
+      });
+
+      const contacts = response.data || [];
+
+      // Safety filter: skip contacts with undefined/null/empty IDs
+      // WWebJS can return corrupted contacts that crash with "must include an id property"
+      const validContacts = contacts.filter((c: any) => {
+        const hasId = c.id !== undefined && c.id !== null && c.id !== '';
+        if (!hasId) {
+          this.logger.warn(`[WAHA] Skipping contact with missing ID: ${JSON.stringify(c).substring(0, 100)}`);
+        }
+        return hasId;
+      });
+
+      this.logger.log(`[WAHA] Fetched ${validContacts.length} valid contacts (${contacts.length - validContacts.length} skipped)`);
+
+      return validContacts.map((c: any) => {
+        const rawId = c.id?.user || c.id || c.phoneNumber || c.number;
+        const stringId = typeof rawId === 'string' ? rawId : '';
+
+        let num = c.phoneNumber ? c.phoneNumber.split('@')[0] : c.number;
+        if (!num && stringId.includes('@')) {
+          num = stringId.split('@')[0];
+        }
+
+        return {
+          id: rawId,
+          name: c.name || c.shortName || null,
+          pushname: c.pushname || null,
+          number: num || null,
+          isBusiness: c.isBusiness || false,
+        };
+      });
+    } catch (error: any) {
+      const msg = error.response?.data?.message || error.response?.data?.exception?.message || error.message;
+      this.logger.error(`[WAHA] Failed to fetch all contacts: ${msg}`);
+      throw new HttpException(`WAHA Sync Error: ${msg}`, HttpStatus.BAD_GATEWAY);
+    }
+  }
+
   async sendMediaMessage(
     _accessToken: string,
     _phoneNumberId: string,
@@ -141,6 +196,70 @@ export class WhatsappService {
       return this.wahaSendFile(to, base64Data, filename, caption);
     }
     throw new Error('Media sending is only supported with WAHA provider');
+  }
+
+  // ===== @lid Resolution Cache =====
+  private readonly lidCache = new Map<string, { number: string; expiresAt: number }>();
+
+  async resolveLid(lid: string): Promise<string | null> {
+    if (!this.isWaha() || !lid.includes('@lid')) return null;
+
+    // Check Cache (24h TTL)
+    const cached = this.lidCache.get(lid);
+    if (cached && cached.expiresAt > Date.now()) {
+      this.logger.log(`[WAHA] @lid cache hit: ${lid} -> ${cached.number}`);
+      return cached.number;
+    }
+
+    try {
+      // Fetch ALL contacts from WAHA
+      const response = await axios.get(
+        `${this.wahaApiUrl}/api/contacts/all?session=${this.wahaSession}`,
+        { headers: this.wahaHeaders() }
+      );
+
+      const contacts = response.data;
+      if (!Array.isArray(contacts)) {
+        this.logger.warn(`[WAHA] Contacts response is not an array`);
+        return null;
+      }
+
+      // Strategy 1: Find a contact with id@c.us whose 'lid' property matches our @lid
+      const matchByLid = contacts.find((c: any) =>
+        c.lid === lid && c.id && typeof c.id === 'string' && c.id.includes('@c.us')
+      );
+
+      if (matchByLid) {
+        const realNumber = matchByLid.id.split('@')[0];
+        this.saveLidToCache(lid, realNumber);
+        return realNumber;
+      }
+
+      // Strategy 2: Find a contact with phoneNumber whose 'lid' matches
+      const matchByPhone = contacts.find((c: any) =>
+        c.lid === lid && c.phoneNumber
+      );
+
+      if (matchByPhone) {
+        const realNumber = matchByPhone.phoneNumber.split('@')[0];
+        this.saveLidToCache(lid, realNumber);
+        return realNumber;
+      }
+
+      this.logger.warn(`[WAHA] No matching contact found for lid: ${lid}`);
+      return null;
+    } catch (err: any) {
+      this.logger.error(`[WAHA] Contacts API failed for lid resolution: ${err.message}`);
+      return null;
+    }
+  }
+
+  private saveLidToCache(lid: string, resolvedNumber: string) {
+    this.logger.log(`[WAHA] Resolved @lid: ${lid} -> ${resolvedNumber}`);
+    this.lidCache.set(lid, {
+      number: resolvedNumber,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+    });
   }
 
   // ===== WAHA Methods =====

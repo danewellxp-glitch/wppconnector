@@ -69,7 +69,7 @@ export class FlowEngineService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private departmentRoutingService: DepartmentRoutingService,
-  ) {}
+  ) { }
 
   processMenuChoice(input: string): string | null {
     const key = normalizeInput(input);
@@ -113,16 +113,22 @@ export class FlowEngineService {
 
   getDefaultGreeting(companyName: string): string {
     return (
-      `Olá! Bem-vindo a ${companyName}!\n\nComo podemos ajudar?\n` +
-      '1 - Laboratório\n2 - Comercial\n3 - Financeiro\n4 - Administrativo'
+      `Olá! 👋 Seja bem-vindo(a) à *SIM Estearina*!\n\n` +
+      `Somos fabricantes de insumos oleoquímicos com mais de 20 anos de experiência. Como podemos te ajudar hoje?\n\n` +
+      `Por favor, digite o *número* da área desejada:\n\n` +
+      `*1️⃣ - Laboratório*\nAnálises, laudos técnicos, controle de qualidade e especificações de produtos.\n\n` +
+      `*2️⃣ - Comercial*\nPedidos, cotações, disponibilidade de produtos e novos negócios.\n\n` +
+      `*3️⃣ - Financeiro*\nBoletos, notas fiscais, prazo de pagamento e questões financeiras.\n\n` +
+      `*4️⃣ - Administrativo*\nDemais assuntos, fornecedores, recursos humanos e informações gerais.\n\n` +
+      `_Nosso horário de atendimento é de segunda a sexta, das 8h às 18h._`
     );
   }
 
-  isBusinessHours(): boolean {
-    // TODO: Desabilitado temporariamente para testes - sempre retorna true
-    return true;
-    
-    /*
+  isBusinessHours(company: any): boolean {
+    if (!company.businessHoursEnabled) {
+      return true; // Se no estiver ativado,  sempre horrio comercial
+    }
+
     const now = new Date();
     // Converter a hora atual do servidor para UTC-3 (Horário de Brasília) para segurança
     const spTime = new Date(
@@ -131,19 +137,34 @@ export class FlowEngineService {
 
     const day = spTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     const hours = spTime.getHours();
+    const minutes = spTime.getMinutes();
+    const currentTotalMinutes = hours * 60 + minutes;
 
-    // Segunda a Sexta (1 a 5), das 08h00 às 17h59
-    if (day >= 1 && day <= 5) {
-      if (hours >= 8 && hours < 18) {
-        return true;
-      }
+    // Verificar se o dia atual est nos dias configurados
+    const businessDays = company.businessDays?.split(',').map(Number) || [1, 2, 3, 4, 5];
+    if (!businessDays.includes(day)) {
+      return false;
     }
+
+    // Verificar hora
+    const startStr = company.businessHoursStart || '08:00';
+    const endStr = company.businessHoursEnd || '18:00';
+
+    const [startH, startM] = startStr.split(':').map(Number);
+    const [endH, endM] = endStr.split(':').map(Number);
+
+    const startTotal = (startH || 8) * 60 + (startM || 0);
+    const endTotal = (endH || 18) * 60 + (endM || 0);
+
+    if (currentTotalMinutes >= startTotal && currentTotalMinutes <= endTotal) {
+      return true;
+    }
+
     return false;
-    */
   }
 
-  getOutOfHoursMessage(): string {
-    return 'Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\nSua mensagem foi registrada e retornaremos o contato em nosso horário comercial. 🙏';
+  getOutOfHoursMessage(company: any): string {
+    return company.outOfOfficeMessage?.trim() || 'Nosso horário de atendimento é de segunda a sexta, das 8h às 18h.\nSua mensagem foi registrada e retornaremos o contato em nosso horário comercial. 🙏';
   }
 
   async sendOutOfHoursMessage(conversation: { id: string; companyId: string }) {
@@ -153,7 +174,7 @@ export class FlowEngineService {
     });
     if (!fullConv) return;
 
-    const text = this.getOutOfHoursMessage();
+    const text = this.getOutOfHoursMessage(fullConv.company);
     const meta = (fullConv.metadata as any) || {};
     const sendTo = meta.chatId || fullConv.customerPhone;
 
@@ -180,15 +201,13 @@ export class FlowEngineService {
   async sendGreeting(conversation: {
     id: string;
     companyId: string;
-    company?: { name: string; greetingMessage?: string | null };
+    company?: { name: string };
   }) {
     const company = await this.prisma.company.findUnique({
       where: { id: conversation.companyId },
-      select: { name: true, greetingMessage: true },
+      select: { name: true },
     });
-    const text =
-      company?.greetingMessage?.trim() ||
-      this.getDefaultGreeting(company?.name || 'nosso atendimento');
+    const text = this.getDefaultGreeting(company?.name || 'nosso atendimento');
 
     const fullConv = await this.prisma.conversation.findUnique({
       where: { id: conversation.id },
@@ -234,9 +253,7 @@ export class FlowEngineService {
     const sendTo = meta.chatId || fullConv.customerPhone;
 
     const invalidText = 'Opção inválida. Por favor escolha 1, 2, 3 ou 4.';
-    const menuText =
-      fullConv.company.greetingMessage?.trim() ||
-      this.getDefaultGreeting(fullConv.company.name);
+    const menuText = this.getDefaultGreeting(fullConv.company.name);
 
     await this.whatsappService.sendTextMessage(
       fullConv.company.whatsappAccessToken,

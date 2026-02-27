@@ -14,7 +14,7 @@ export class DepartmentRoutingService {
     private prisma: PrismaService,
     private moduleRef: ModuleRef,
     private notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   private getWebsocketGateway(): WebsocketGateway | null {
     try {
@@ -124,6 +124,20 @@ export class DepartmentRoutingService {
   ): Promise<{ id: string; name: string } | null> {
     return await this.prisma.$transaction(
       async (tx) => {
+        // Buscar dados da conversa e da empresa
+        const conv = await tx.conversation.findUnique({
+          where: { id: conversationId },
+          include: { company: true },
+        });
+
+        if (!conv) return null;
+
+        // Se a empresa desativou a atribuição automática, não designar agente
+        if (conv.company && !conv.company.autoAssignEnabled) {
+          this.logger.log(`[ASSIGNMENT] Atribuição automática desativada para a empresa ${conv.companyId}. Mantendo na fila.`);
+          return null;
+        }
+
         // Buscar agentes disponíveis COM contagem dentro da transação
         const agents = await tx.user.findMany({
           where: {

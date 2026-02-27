@@ -46,17 +46,24 @@ export class ConversationsController {
     );
   }
 
+  @Post('sync-contacts')
+  syncContacts(@CurrentUser() user: any) {
+    return this.conversationsService.syncContactsFromWhatsapp(user.companyId, user.id);
+  }
+
   @Post('contacts')
   createContactAndStartChat(
     @CurrentUser() user: any,
     @Body('customerName') customerName: string,
     @Body('customerPhone') customerPhone: string,
+    @Body('initialMessage') initialMessage?: string,
   ) {
     return this.conversationsService.createContactAndStartChat(
       user.companyId,
       customerName,
       customerPhone,
       user.id,
+      initialMessage,
     );
   }
 

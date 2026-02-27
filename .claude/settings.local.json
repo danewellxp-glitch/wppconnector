@@ -55,7 +55,8 @@
       "Bash(sysctl:*)",
       "Bash(journalctl:*)",
       "Bash(kill:*)",
-      "Bash(top:*)"
+      "Bash(top:*)",
+      "Bash(git:*)"
     ]
   }
 }

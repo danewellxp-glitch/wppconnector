@@ -195,9 +195,50 @@ export class ConversationsService {
     });
   }
 
-  async createContactAndStartChat(companyId: string, customerName: string, customerPhone: string, userId: string) {
+  async syncContactsFromWhatsapp(companyId: string, userId: string) {
+    const agent = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { departmentId: true, name: true }
+    });
+
+    const wahaContacts = await this.whatsappService.getContacts();
+    let syncedCount = 0;
+
+    for (const wContact of wahaContacts) {
+      if (!wContact.number) continue;
+
+      const customerPhone = wContact.number;
+      const customerName = wContact.name || wContact.pushname || customerPhone;
+
+      // We only insert or update the name. We do NOT change status if it already exists.
+      // We set new contacts as ARCHIVED so they don't pop up as OPEN for everyone.
+      await this.prisma.conversation.upsert({
+        where: { companyId_customerPhone: { companyId, customerPhone } },
+        update: {
+          // update name if they have a better one now
+          customerName: customerName,
+        },
+        create: {
+          companyId,
+          customerPhone,
+          customerName,
+          status: 'ARCHIVED',
+          flowState: 'RESOLVED',
+          departmentId: agent?.departmentId || null,
+          unreadCount: 0,
+        }
+      });
+
+      syncedCount++;
+    }
+
+    return { message: 'Contatos sincronizados com sucesso', count: syncedCount };
+  }
+
+  async createContactAndStartChat(companyId: string, customerName: string, customerPhone: string, userId: string, initialMessage?: string) {
     let conv = await this.prisma.conversation.findUnique({
       where: { companyId_customerPhone: { companyId, customerPhone } },
+      include: { company: true }
     });
 
     const agent = await this.prisma.user.findUnique({
@@ -232,9 +273,9 @@ export class ConversationsService {
           routedAt: new Date(),
           timeoutAt: null,
           unreadCount: 0,
-        }
+        },
+        include: { company: true }
       });
-
     } else {
       // Create new conversation
       conv = await this.prisma.conversation.create({
@@ -248,7 +289,8 @@ export class ConversationsService {
           assignedAt: new Date(),
           departmentId: agent?.departmentId || null,
           routedAt: new Date(),
-        }
+        },
+        include: { company: true }
       });
 
       await this.prisma.assignment.create({
@@ -256,9 +298,42 @@ export class ConversationsService {
       });
     }
 
+    if (initialMessage && initialMessage.trim().length > 0 && conv.company) {
+      try {
+        const response: any = await this.whatsappService.sendTextMessage(
+          conv.company.whatsappAccessToken,
+          conv.company.whatsappPhoneNumberId,
+          customerPhone,
+          initialMessage.trim()
+        );
+
+        let whatsappMessageId = `out_${Date.now()}`;
+        if (response && response.messages && response.messages.length > 0) {
+          whatsappMessageId = response.messages[0].id;
+        }
+
+        await this.prisma.message.create({
+          data: {
+            companyId: companyId,
+            conversationId: conv.id,
+            whatsappMessageId: whatsappMessageId,
+            direction: 'OUTBOUND',
+            type: 'TEXT',
+            content: initialMessage.trim(),
+            isBot: false,
+            sentById: userId,
+            status: 'SENT',
+          }
+        });
+      } catch (err: any) {
+        this.logger.error(`[WAHA] Failed to send initial message to ${customerPhone}: ${err.message}`);
+        // We don't throw to disrupt the chat creation, we just let it fail silently and login
+      }
+    }
+
     const gateway = this.getWebsocketGateway();
     if (gateway && agent?.departmentId) {
-      gateway.emitToDepartment(agent.departmentId, 'conversation-assigned', {
+      gateway.emitToDepartment(agent?.departmentId, 'conversation-assigned', {
         conversationId: conv.id,
         conversation: conv,
         agentName: agent.name,

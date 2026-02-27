@@ -1,33 +1,74 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { Role } from '@/types/user';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Settings, Phone, Building, Key, Globe, PowerOff } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Settings, Phone, Building, Key, Globe, PowerOff, Clock, Users } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
   const currentUser = useAuthStore((s) => s.user);
   const isAdmin = currentUser?.role === Role.ADMIN;
-  const [shuttingDown, setShuttingDown] = useState(false);
 
-  const handleShutdown = async () => {
-    if (!confirm('Encerrar o servidor backend agora? O sistema deixará de responder até você iniciar o backend novamente.')) return;
-    setShuttingDown(true);
-    try {
-      await apiClient.post('/system/shutdown');
-      toast.success('Servidor encerrado.');
-    } catch {
-      toast.success('Comando enviado. O servidor está encerrando.');
-    } finally {
-      setShuttingDown(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState({
+    greetingMessage: '',
+    autoAssignEnabled: true,
+    businessHoursEnabled: false,
+    businessHoursStart: '08:00',
+    businessHoursEnd: '18:00',
+    businessDays: '1,2,3,4,5',
+    outOfOfficeMessage: '',
+  });
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadSettings();
     }
+  }, [isAdmin]);
+
+  const loadSettings = async () => {
+    try {
+      const res = await apiClient.get('/settings');
+      setSettings({
+        greetingMessage: res.data.greetingMessage || '',
+        autoAssignEnabled: res.data.autoAssignEnabled ?? true,
+        businessHoursEnabled: res.data.businessHoursEnabled ?? false,
+        businessHoursStart: res.data.businessHoursStart || '08:00',
+        businessHoursEnd: res.data.businessHoursEnd || '18:00',
+        businessDays: res.data.businessDays || '1,2,3,4,5',
+        outOfOfficeMessage: res.data.outOfOfficeMessage || '',
+      });
+    } catch (error) {
+      toast.error('Erro ao carregar configurações');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await apiClient.put('/settings', settings);
+      toast.success('Configurações salvas com sucesso!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Erro ao salvar configurações');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateSetting = (key: keyof typeof settings, value: any) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   if (!isAdmin) {
@@ -71,6 +112,92 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">{currentUser?.email}</p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Ticket Assignment */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-indigo-500" />
+            Distribuição de Atendimentos
+          </CardTitle>
+          <CardDescription>
+            Controle de roleta automática (Round-Robin) para distribuir novos clientes para os atendentes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-base">Atribuição Automática</Label>
+              <p className="text-sm text-muted-foreground">
+                Se ativado, novas conversas serão entregues ao atendente com menos chats abertos.
+                Se desativado, ficarão na fila esperando alguém aceitar manualmente.
+              </p>
+            </div>
+            <Switch
+              checked={settings.autoAssignEnabled}
+              onCheckedChange={(c: boolean) => updateSetting('autoAssignEnabled', c)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Business Hours */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-amber-500" />
+            Horário Comercial
+          </CardTitle>
+          <CardDescription>
+            Ative para barrar mensagens fora do expediente com um recado automático.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-base">Habilitar Horário Comercial</Label>
+              <p className="text-sm text-muted-foreground">
+                Controla se o robô filtra atendimentos por hora e dia da semana.
+              </p>
+            </div>
+            <Switch
+              checked={settings.businessHoursEnabled}
+              onCheckedChange={(c: boolean) => updateSetting('businessHoursEnabled', c)}
+            />
+          </div>
+
+          {settings.businessHoursEnabled && (
+            <div className="space-y-4 pt-4 border-t">
+              <div className="grid grid-cols-2 max-w-sm gap-4">
+                <div className="space-y-2">
+                  <Label>Abertura</Label>
+                  <Input
+                    type="time"
+                    value={settings.businessHoursStart}
+                    onChange={(e) => updateSetting('businessHoursStart', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Fechamento</Label>
+                  <Input
+                    type="time"
+                    value={settings.businessHoursEnd}
+                    onChange={(e) => updateSetting('businessHoursEnd', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Mensagem de Ausência (Out of Office)</Label>
+                <Textarea
+                  value={settings.outOfOfficeMessage}
+                  onChange={(e) => updateSetting('outOfOfficeMessage', e.target.value)}
+                  placeholder="Ex: Estamos fechados agora. Voltaremos segunda-feira."
+                />
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -168,28 +295,12 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Shutdown */}
-      <Card className="border-destructive/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-destructive">
-            <PowerOff className="h-5 w-5" />
-            Encerrar aplicacao
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            Encerra o servidor backend (Node). O frontend deixara de conectar ate voce iniciar o backend novamente.
-          </p>
-          <Button
-            variant="destructive"
-            onClick={handleShutdown}
-            disabled={shuttingDown}
-          >
-            <PowerOff className="h-4 w-4 mr-2" />
-            {shuttingDown ? 'Encerrando...' : 'Encerrar servidor'}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Action footer */}
+      <div className="flex justify-end pt-4 pb-8">
+        <Button onClick={handleSave} disabled={saving} className="w-full md:w-auto">
+          {saving ? 'Salvando...' : 'Salvar Alteracoes'}
+        </Button>
+      </div>
     </div>
   );
 }

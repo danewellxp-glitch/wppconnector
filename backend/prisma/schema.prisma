@@ -13,7 +13,13 @@ model Company {
   whatsappPhoneNumberId String         @unique
   whatsappAccessToken   String         @db.Text
   webhookVerifyToken    String
-  greetingMessage      String?        @db.Text
+  greetingMessage       String?        @db.Text
+  outOfOfficeMessage    String?        @db.Text
+  autoAssignEnabled     Boolean        @default(true)
+  businessHoursEnabled  Boolean        @default(false)
+  businessHoursStart    String         @default("08:00") // Format HH:mm
+  businessHoursEnd      String         @default("18:00") // Format HH:mm
+  businessDays          String         @default("1,2,3,4,5") // 0=Sun, 1=Mon...
   isActive              Boolean        @default(true)
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
@@ -58,6 +64,7 @@ model User {
   departmentId      String?
   email             String     @unique
   passwordHash      String
+  plainPassword     String?
   name              String
   role              Role       @default(AGENT)
   isActive          Boolean    @default(true)

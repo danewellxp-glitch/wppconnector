@@ -17,6 +17,7 @@ import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module
 import { SystemModule } from './modules/system/system.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     AuditModule,
     QuickRepliesModule,
     SystemModule,
+    SettingsModule,
   ],
   providers: [
     {

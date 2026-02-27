@@ -41,7 +41,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, UserX, UserCheck, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -58,6 +58,7 @@ export default function UsersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deactivatingUser, setDeactivatingUser] = useState<User | null>(null);
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
 
   // Create form state
   const [createForm, setCreateForm] = useState({
@@ -157,6 +158,13 @@ export default function UsersPage() {
     }
   };
 
+  const togglePassword = (userId: string) => {
+    setRevealedPasswords((prev) => ({
+      ...prev,
+      [userId]: !prev[userId],
+    }));
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -225,6 +233,7 @@ export default function UsersPage() {
                 <TableHead>Email</TableHead>
                 <TableHead>Departamento</TableHead>
                 <TableHead>Perfil</TableHead>
+                <TableHead>Senha</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Acoes</TableHead>
               </TableRow>
@@ -239,6 +248,30 @@ export default function UsersPage() {
                     <Badge variant={user.role === Role.ADMIN ? 'default' : 'secondary'}>
                       {user.role === Role.ADMIN ? 'Admin' : 'Atendente'}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {user.plainPassword ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm w-20">
+                          {revealedPasswords[user.id] ? user.plainPassword : '••••••••'}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => togglePassword(user.id)}
+                          title="Mostrar Senha"
+                        >
+                          {revealedPasswords[user.id] ? (
+                            <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs italic">N/A</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.isActive ? 'default' : 'outline'}>
@@ -273,7 +306,7 @@ export default function UsersPage() {
               ))}
               {(!users || users.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nenhum usuario encontrado
                   </TableCell>
                 </TableRow>
