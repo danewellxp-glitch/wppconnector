@@ -94,6 +94,7 @@ model Conversation {
   companyId              String
   customerPhone          String
   customerName           String?
+  wahaSession            String             @default("default")
   status                 ConversationStatus @default(OPEN)
   departmentId           String?
   assignedUserId         String?
@@ -118,7 +119,7 @@ model Conversation {
   assignments  Assignment[]
   notes        ConversationNote[]
 
-  @@unique([companyId, customerPhone])
+  @@unique([companyId, customerPhone, wahaSession])
   @@index([companyId, status, lastMessageAt])
   @@index([departmentId])
   @@index([assignedUserId])

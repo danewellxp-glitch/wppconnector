@@ -149,13 +149,14 @@ export class MessagesService {
       isBusiness?: boolean;
       profilePictureURL?: string;
     },
+    wahaSession = 'default',
   ) {
     let conversation = await this.prisma.conversation.findUnique({
-      where: { companyId_customerPhone: { companyId, customerPhone } },
+      where: { companyId_customerPhone_wahaSession: { companyId, customerPhone, wahaSession } },
     });
     if (!conversation && chatId && chatId !== customerPhone) {
       conversation = await this.prisma.conversation.findUnique({
-        where: { companyId_customerPhone: { companyId, customerPhone: chatId } },
+        where: { companyId_customerPhone_wahaSession: { companyId, customerPhone: chatId, wahaSession } },
       });
       if (conversation) {
         conversation = await this.prisma.conversation.update({
@@ -176,6 +177,7 @@ export class MessagesService {
         data: {
           companyId,
           customerPhone,
+          wahaSession,
           customerName: customerName || null,
           status: 'OPEN',
           metadata: {
@@ -204,6 +206,7 @@ export class MessagesService {
       profilePictureURL?: string;
     },
     quotedMsg?: { id?: string; body?: string; type?: string; fromMe?: boolean },
+    wahaSession = 'default',
   ) {
     // Check for duplicate (idempotency)
     const existing = await this.prisma.message.findUnique({
@@ -218,7 +221,7 @@ export class MessagesService {
     // Find conversation by real phone number first, then try chatId (backward compat)
     let conversation = await this.prisma.conversation.findUnique({
       where: {
-        companyId_customerPhone: { companyId, customerPhone },
+        companyId_customerPhone_wahaSession: { companyId, customerPhone, wahaSession },
       },
     });
 
@@ -226,7 +229,7 @@ export class MessagesService {
     if (!conversation && chatId && chatId !== customerPhone) {
       conversation = await this.prisma.conversation.findUnique({
         where: {
-          companyId_customerPhone: { companyId, customerPhone: chatId },
+          companyId_customerPhone_wahaSession: { companyId, customerPhone: chatId, wahaSession },
         },
       });
 
@@ -254,6 +257,7 @@ export class MessagesService {
         data: {
           companyId,
           customerPhone,
+          wahaSession,
           customerName: customerName || null,
           status: 'OPEN',
           metadata: {

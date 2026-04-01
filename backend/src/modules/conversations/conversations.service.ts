@@ -213,7 +213,7 @@ export class ConversationsService {
       // We only insert or update the name. We do NOT change status if it already exists.
       // We set new contacts as ARCHIVED so they don't pop up as OPEN for everyone.
       await this.prisma.conversation.upsert({
-        where: { companyId_customerPhone: { companyId, customerPhone } },
+        where: { companyId_customerPhone_wahaSession: { companyId, customerPhone, wahaSession: 'default' } },
         update: {
           // update name if they have a better one now
           customerName: customerName,
@@ -221,6 +221,7 @@ export class ConversationsService {
         create: {
           companyId,
           customerPhone,
+          wahaSession: 'default',
           customerName,
           status: 'ARCHIVED',
           flowState: 'RESOLVED',
@@ -237,7 +238,7 @@ export class ConversationsService {
 
   async createContactAndStartChat(companyId: string, customerName: string, customerPhone: string, userId: string, initialMessage?: string) {
     let conv = await this.prisma.conversation.findUnique({
-      where: { companyId_customerPhone: { companyId, customerPhone } },
+      where: { companyId_customerPhone_wahaSession: { companyId, customerPhone, wahaSession: 'default' } },
       include: { company: true }
     });
 

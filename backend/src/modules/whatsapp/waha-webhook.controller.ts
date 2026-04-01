@@ -43,7 +43,8 @@ export class WahaWebhookController {
     this.logger.debug('WAHA webhook received', JSON.stringify(body));
 
     try {
-      const { event, payload } = body;
+      const { event, payload, session } = body;
+      const wahaSession: string = session || 'default';
 
       if (!payload) return 'OK';
 
@@ -54,7 +55,7 @@ export class WahaWebhookController {
             this.logger.debug('Ignoring outbound message');
             return 'OK';
           }
-          await this.handleIncomingMessage(payload);
+          await this.handleIncomingMessage(payload, wahaSession);
           break;
         case 'message.any':
           // Ignore message.any completely for now to avoid duplicate processing,
@@ -73,7 +74,7 @@ export class WahaWebhookController {
     return 'OK';
   }
 
-  private async handleIncomingMessage(payload: any) {
+  private async handleIncomingMessage(payload: any, wahaSession = 'default') {
     const chatId = payload.from || '';
     if (!chatId) {
       this.logger.warn('No phone number in WAHA payload');
@@ -156,7 +157,7 @@ export class WahaWebhookController {
     const whatsappMessageId =
       typeof payload.id === 'string'
         ? payload.id
-        : payload.id?._serialized || payload.id?.id || `waha_${Date.now()} `;
+        : payload.id?._serialized || payload.id?.id || `waha_${Date.now()}`;
 
     const customerName =
       contactInfo?.pushname ||
@@ -276,6 +277,7 @@ export class WahaWebhookController {
       customerName,
       chatId,
       contactProfile,
+      wahaSession,
     );
 
     // If conversation was RESOLVED, reopen it and restart the bot flow
@@ -311,7 +313,7 @@ export class WahaWebhookController {
         if (claimed.count === 0) {
           // Outro handler já enviou o greeting — salva a mensagem e encerra
           await this.messagesService.handleIncomingMessage(
-            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile,
+            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile, undefined, wahaSession,
           );
           return;
         }
@@ -329,6 +331,10 @@ export class WahaWebhookController {
 
         if (hasSuggestion) {
           // Conversa em estado AWAITING_ROUTING_CONFIRMATION, aguardando resposta
+          // Salva a mensagem do cliente antes de sair — sem isso ela seria perdida
+          await this.messagesService.handleIncomingMessage(
+            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile, undefined, wahaSession,
+          );
           return;
         }
 
@@ -402,6 +408,7 @@ export class WahaWebhookController {
         chatId,
         contactProfile,
         quotedMsg,
+        wahaSession,
       );
       return;
     }
@@ -456,6 +463,7 @@ export class WahaWebhookController {
         chatId,
         contactProfile,
         quotedMsg,
+        wahaSession,
       );
       return; // Don't process further when responding to routing suggestion
     }
@@ -508,6 +516,7 @@ export class WahaWebhookController {
         chatId,
         contactProfile,
         quotedMsg,
+        wahaSession,
       );
 
       this.whatsappService
@@ -532,6 +541,7 @@ export class WahaWebhookController {
       chatId,
       contactProfile,
       quotedMsg,
+      wahaSession,
     );
 
     // Auto mark as read via WAHA
