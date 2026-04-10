@@ -50,9 +50,10 @@ model Department {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  company       Company        @relation(fields: [companyId], references: [id])
-  users         User[]
-  conversations Conversation[]
+  company         Company          @relation(fields: [companyId], references: [id])
+  activeUsers     User[]
+  conversations   Conversation[]
+  userDepartments UserDepartment[]
 
   @@unique([companyId, slug])
   @@map("departments")
@@ -65,17 +66,19 @@ model User {
   email             String     @unique
   passwordHash      String
   name              String
-  role              Role       @default(AGENT)
-  isActive          Boolean    @default(true)
+  role                  Role       @default(AGENT)
+  activeDepartmentIds   String[]   @default([])
+  isActive              Boolean    @default(true)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  company               Company        @relation(fields: [companyId], references: [id])
-  department            Department?  @relation(fields: [departmentId], references: [id])
+  company               Company          @relation(fields: [companyId], references: [id])
+  department            Department?      @relation(fields: [departmentId], references: [id])
+  userDepartments       UserDepartment[]
   assignments           Assignment[]
-  sentMessages          Message[]     @relation("SentMessages")
+  sentMessages          Message[]        @relation("SentMessages")
   auditLogs             AuditLog[]
-  assignedConversations Conversation[] @relation("AssignedConversations")
+  assignedConversations Conversation[]   @relation("AssignedConversations")
   conversationNotes     ConversationNote[]
   passwordResetRequests PasswordResetRequest[]
 
@@ -87,6 +90,17 @@ model User {
 enum Role {
   ADMIN
   AGENT
+}
+
+model UserDepartment {
+  userId       String
+  departmentId String
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, departmentId])
+  @@map("user_departments")
 }
 
 model Conversation {

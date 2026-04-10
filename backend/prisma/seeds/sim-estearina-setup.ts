@@ -13,29 +13,34 @@ const SIM_ESTEARINA_COMPANY = {
 
 const GREETING_MESSAGE = `Olá! 👋 Seja bem-vindo(a) à *SIM Estearina*!
 
-Somos fabricantes de insumos oleoquímicos com mais de 20 anos de experiência. Como podemos te ajudar hoje?
+Como podemos te ajudar hoje? Por favor, digite o *número* da área desejada:
 
-Por favor, digite o *número* da área desejada:
+*1️⃣ Laboratório*
+Análises técnicas, laudos, controle de qualidade, especificações e certificados de produtos.
 
-*1️⃣ - Laboratório*
-Análises, laudos técnicos, controle de qualidade e especificações de produtos.
+*2️⃣ Vendas — Thays*
+Pedidos, cotações, disponibilidade de produtos, amostras, novos negócios e prazo de entrega.
 
-*2️⃣ - Comercial*
-Pedidos, cotações, disponibilidade de produtos e novos negócios.
+*3️⃣ Compras - Rose (Manutenção)*
+Boletos, notas fiscais, prazos de pagamento, conciliações e questões financeiras.
 
-*3️⃣ - Financeiro*
-Boletos, notas fiscais, prazo de pagamento e questões financeiras.
+*4️⃣ Compras Thays (Insumos/Matéria Prima)*
 
-*4️⃣ - Administrativo*
-Demais assuntos, fornecedores, recursos humanos e informações gerais.
+*5️⃣ Produção*
+Processo produtivo, questões técnicas de fabricação.
 
-_Nosso horário de atendimento é de segunda a sexta, das 8h às 18h._`;
+*6️⃣ Falar com um Atendente 👤*
+Transferência direta para um atendente humano disponível.
+
+_⏰ Nosso horário de atendimento é de segunda a sexta, das 8h às 18h._`;
 
 const DEPARTMENTS = [
   { slug: 'administrativo', name: 'Administrativo', isRoot: true, color: '#1E3A5F' },
   { slug: 'laboratorio', name: 'Laboratório', isRoot: false, color: '#2E86AB' },
-  { slug: 'comercial', name: 'Comercial', isRoot: false, color: '#27AE60' },
-  { slug: 'financeiro', name: 'Financeiro', isRoot: false, color: '#E67E22' },
+  { slug: 'vendas', name: 'Vendas', isRoot: false, color: '#27AE60' },
+  { slug: 'compras-rose', name: 'Compras - Rose', isRoot: false, color: '#E67E22' },
+  { slug: 'compras-thays', name: 'Compras Thays', isRoot: false, color: '#9B59B6' },
+  { slug: 'producao', name: 'Produção', isRoot: false, color: '#16A085' },
 ];
 
 const AGENTS = [

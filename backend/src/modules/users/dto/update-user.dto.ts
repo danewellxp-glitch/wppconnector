@@ -24,4 +24,11 @@ export class UpdateUserDto {
   @IsOptional()
   @MinLength(6)
   password?: string;
+
+  @IsString()
+  @IsOptional()
+  departmentId?: string | null;
+
+  @IsOptional()
+  activeDepartmentIds?: string[];
 }

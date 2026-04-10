@@ -30,12 +30,12 @@ services:
     ports:
       - "3101:3000"
     environment:
-      - WAHA_DASHBOARD_USERNAME=admin
-      - WAHA_DASHBOARD_PASSWORD=admin123
+      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME:-admin}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-Le98yqbl@}
       - WAHA_API_KEY=wpp_waha_dev_key_2024
       - WHATSAPP_HOOK_URL=http://192.168.10.156:4000/webhooks/waha
       - WHATSAPP_HOOK_EVENTS=message,message.any,message.ack
-      - WHATSAPP_START_SESSION=default
+      - WHATSAPP_START_SESSION=default,default2,default3
       - WHATSAPP_DEFAULT_ENGINE=WEBJS
     volumes:
       - waha_sessions:/app/.sessions

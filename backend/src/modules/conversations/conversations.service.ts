@@ -41,28 +41,16 @@ export class ConversationsService {
   async findAll(
     companyId: string,
     status?: ConversationStatus,
-    user?: { role: string; departmentId?: string | null },
+    user?: { role: string; departmentId?: string | null; activeDepartmentIds?: string[] },
   ) {
     const where: any = { companyId, ...(status && { status }) };
-    if (user && user.role !== 'ADMIN' && user.departmentId) {
-      // Find the root department for this company
-      const rootDept = await this.prisma.department.findFirst({
-        where: { companyId, isRoot: true },
-      });
-
-      if (rootDept) {
-        // Agent can see:
-        // 1) Conversations in their own department
-        // 2) Conversations in the Root department that are unassigned (Offline Queue)
-        where.OR = [
-          { departmentId: user.departmentId },
-          {
-            departmentId: rootDept.id,
-            assignedUserId: null,
-            status: 'OPEN', // Only pending offline queue
-          },
-        ];
-      } else {
+    if (user && user.role !== 'ADMIN') {
+      const activeIds = user.activeDepartmentIds;
+      if (activeIds && activeIds.length > 0) {
+        // Multi-department session: show conversations from all selected departments
+        where.departmentId = { in: activeIds };
+      } else if (user.departmentId) {
+        // Fallback to single departmentId
         where.departmentId = user.departmentId;
       }
     }
@@ -142,26 +130,8 @@ export class ConversationsService {
     const where: any = { companyId };
 
     if (user && user.role !== 'ADMIN' && user.departmentId) {
-      // Find the root department for this company
-      const rootDept = await this.prisma.department.findFirst({
-        where: { companyId, isRoot: true },
-      });
-
-      if (rootDept) {
-        // Agent can see:
-        // 1) Contacts in their own department
-        // 2) Contacts in the Root department that are unassigned (Offline Queue)
-        where.OR = [
-          { departmentId: user.departmentId },
-          {
-            departmentId: rootDept.id,
-            assignedUserId: null,
-            status: 'OPEN', // Only pending offline queue
-          }
-        ];
-      } else {
-        where.departmentId = user.departmentId;
-      }
+      // Agent sees only their own department's contacts
+      where.departmentId = user.departmentId;
     }
 
     if (query) {

@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/card';
 import Image from 'next/image';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
+import { DepartmentSelectorModal } from './DepartmentSelectorModal';
+import { Role } from '@/types/user';
 
 export function LoginForm() {
   const [email, setEmail] = useState('');
@@ -23,6 +25,8 @@ export function LoginForm() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [showDeptSelector, setShowDeptSelector] = useState(false);
+  const [loginToken, setLoginToken] = useState<string>('');
 
   const { login } = useAuth();
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -48,6 +52,13 @@ export function LoginForm() {
           // ignore patch errors (non-blocking)
           console.warn('Failed to update user name', e);
         }
+      }
+
+      // Show department selector for agents
+      if (data.user?.role !== Role.ADMIN) {
+        setLoginToken(data.token);
+        setShowDeptSelector(true);
+        return;
       }
 
       router.push('/dashboard');
@@ -133,6 +144,15 @@ export function LoginForm() {
       <ForgotPasswordModal
         isOpen={isForgotPasswordOpen}
         onClose={() => setIsForgotPasswordOpen(false)}
+      />
+
+      <DepartmentSelectorModal
+        open={showDeptSelector}
+        token={loginToken}
+        onSelected={() => {
+          setShowDeptSelector(false);
+          router.push('/dashboard');
+        }}
       />
     </Card>
   );

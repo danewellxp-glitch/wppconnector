@@ -3,6 +3,12 @@ export enum Role {
   AGENT = 'AGENT',
 }
 
+export interface Department {
+  id: string;
+  name: string;
+  color?: string;
+}
+
 export interface User {
   id: string;
   email: string;
@@ -10,7 +16,9 @@ export interface User {
   role: Role;
   companyId: string;
   departmentId?: string | null;
-  department?: { name: string } | null;
+  activeDepartmentIds?: string[];
+  department?: Department | null;
+  userDepartments?: { department: Department }[];
   isActive: boolean;
 }
 

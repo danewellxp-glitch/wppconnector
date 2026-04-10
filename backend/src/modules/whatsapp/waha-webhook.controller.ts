@@ -99,7 +99,7 @@ export class WahaWebhookController {
       this.logger.log(`[WAHA] Tentando resolver @lid: ${chatId}`);
 
       // 1 & 2. Tentar via WAHA API (Endpoints diretos e Contacts)
-      const resolvedFromApi = await this.whatsappService.resolveLid(chatId);
+      const resolvedFromApi = await this.whatsappService.resolveLid(chatId, wahaSession);
 
       if (resolvedFromApi) {
         customerPhone = resolvedFromApi;
@@ -136,7 +136,7 @@ export class WahaWebhookController {
       }
     }
 
-    const contactInfo = await this.whatsappService.getContactInfo(customerPhone === chatId ? chatId : `${customerPhone}@c.us`);
+    const contactInfo = await this.whatsappService.getContactInfo(customerPhone === chatId ? chatId : `${customerPhone}@c.us`, wahaSession);
     if (contactInfo?.number) {
       // Se não era lid, ou se conseguimos pegar info do número resolvido
       if (customerPhone === chatId) customerPhone = contactInfo.number;
@@ -302,6 +302,22 @@ export class WahaWebhookController {
 
     // --- Flow Engine Logic ---
     if (conversation.flowState === 'GREETING') {
+      // Salvar a mensagem PRIMEIRO — garante que o polling encontre via existingCheck
+      // e não processe o mesmo evento novamente enquanto o webhook ainda está rodando.
+      await this.messagesService.handleIncomingMessage(
+        company.id,
+        customerPhone,
+        whatsappMessageId,
+        content,
+        type,
+        customerName,
+        mediaUrl,
+        chatId,
+        contactProfile,
+        quotedMsg,
+        wahaSession,
+      );
+
       if (!conversation.greetingSentAt) {
         // Claim atômico: somente quem conseguir setar greetingSentAt (quando ainda null) procede.
         // Evita duplicidade quando webhook e polling processam o mesmo evento simultaneamente.
@@ -311,10 +327,7 @@ export class WahaWebhookController {
         });
 
         if (claimed.count === 0) {
-          // Outro handler já enviou o greeting — salva a mensagem e encerra
-          await this.messagesService.handleIncomingMessage(
-            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile, undefined, wahaSession,
-          );
+          // Outro handler já enviou o greeting — mensagem já salva acima, apenas encerra
           return;
         }
 
@@ -330,11 +343,6 @@ export class WahaWebhookController {
           );
 
         if (hasSuggestion) {
-          // Conversa em estado AWAITING_ROUTING_CONFIRMATION, aguardando resposta
-          // Salva a mensagem do cliente antes de sair — sem isso ela seria perdida
-          await this.messagesService.handleIncomingMessage(
-            company.id, customerPhone, whatsappMessageId, content, type, customerName, mediaUrl, chatId, contactProfile, undefined, wahaSession,
-          );
           return;
         }
 
@@ -395,21 +403,6 @@ export class WahaWebhookController {
           await this.flowEngineService.handleInvalidChoice(conversation);
         }
       }
-
-      // Save the inbound message to DB
-      await this.messagesService.handleIncomingMessage(
-        company.id,
-        customerPhone,
-        whatsappMessageId,
-        content,
-        type,
-        customerName,
-        mediaUrl,
-        chatId,
-        contactProfile,
-        quotedMsg,
-        wahaSession,
-      );
       return;
     }
 
@@ -499,6 +492,7 @@ export class WahaWebhookController {
               company.whatsappPhoneNumberId,
               sendTo,
               `✅ Um atendente do setor * ${deptName} * está disponível!\n\nConectando com * ${agent.name}*... 😊`,
+              wahaSession,
             )
             .catch(() => { });
         }
@@ -524,6 +518,7 @@ export class WahaWebhookController {
           company.whatsappAccessToken,
           company.whatsappPhoneNumberId,
           whatsappMessageId,
+          wahaSession,
         )
         .catch(() => { });
       return;
@@ -550,6 +545,7 @@ export class WahaWebhookController {
         company.whatsappAccessToken,
         company.whatsappPhoneNumberId,
         whatsappMessageId,
+        wahaSession,
       )
       .catch(() => { });
   }

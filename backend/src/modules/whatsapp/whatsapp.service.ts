@@ -32,9 +32,10 @@ export class WhatsappService {
     phoneNumberId: string,
     to: string,
     text: string,
+    session?: string,
   ) {
     if (this.isWaha()) {
-      return this.wahaSendText(to, text);
+      return this.wahaSendText(to, text, session);
     }
     return this.metaSendText(accessToken, phoneNumberId, to, text);
   }
@@ -43,9 +44,10 @@ export class WhatsappService {
     accessToken: string,
     phoneNumberId: string,
     messageId: string,
+    session?: string,
   ) {
     if (this.isWaha()) {
-      return this.wahaMarkAsRead(messageId);
+      return this.wahaMarkAsRead(messageId, session);
     }
     return this.metaMarkAsRead(accessToken, phoneNumberId, messageId);
   }
@@ -86,7 +88,7 @@ export class WhatsappService {
    * Resolve a WAHA chatId (LID or @c.us) to real contact info.
    * Returns null if resolution fails.
    */
-  async getContactInfo(contactId: string): Promise<{
+  async getContactInfo(contactId: string, session?: string): Promise<{
     number: string;
     pushname: string | null;
     name: string | null;
@@ -94,9 +96,10 @@ export class WhatsappService {
     profilePictureURL: string | null;
   } | null> {
     if (!this.isWaha()) return null;
+    const resolvedSession = session || this.wahaSession;
     try {
       const res = await axios.get(`${this.wahaApiUrl}/api/contacts`, {
-        params: { session: this.wahaSession, contactId },
+        params: { session: resolvedSession, contactId },
         headers: this.wahaHeaders(),
       });
       const d = res.data;
@@ -106,7 +109,7 @@ export class WhatsappService {
         const picRes = await axios.get(
           `${this.wahaApiUrl}/api/contacts/profile-picture`,
           {
-            params: { session: this.wahaSession, contactId },
+            params: { session: resolvedSession, contactId },
             headers: this.wahaHeaders(),
           },
         );
@@ -191,9 +194,10 @@ export class WhatsappService {
     base64Data: string,
     filename: string,
     caption?: string,
+    session?: string,
   ) {
     if (this.isWaha()) {
-      return this.wahaSendFile(to, base64Data, filename, caption);
+      return this.wahaSendFile(to, base64Data, filename, caption, session);
     }
     throw new Error('Media sending is only supported with WAHA provider');
   }
@@ -201,7 +205,7 @@ export class WhatsappService {
   // ===== @lid Resolution Cache =====
   private readonly lidCache = new Map<string, { number: string; expiresAt: number }>();
 
-  async resolveLid(lid: string): Promise<string | null> {
+  async resolveLid(lid: string, session?: string): Promise<string | null> {
     if (!this.isWaha() || !lid.includes('@lid')) return null;
 
     // Check Cache (24h TTL)
@@ -211,10 +215,11 @@ export class WhatsappService {
       return cached.number;
     }
 
+    const resolvedSession = session || this.wahaSession;
     try {
       // Fetch ALL contacts from WAHA
       const response = await axios.get(
-        `${this.wahaApiUrl}/api/contacts/all?session=${this.wahaSession}`,
+        `${this.wahaApiUrl}/api/contacts/all?session=${resolvedSession}`,
         { headers: this.wahaHeaders() }
       );
 
@@ -295,16 +300,18 @@ export class WhatsappService {
     base64Data: string,
     filename: string,
     caption?: string,
+    session?: string,
   ) {
     const chatId = to.includes('@') ? to : `${to}@c.us`;
     const mimetype = this.getMimetype(filename);
     const isImage = mimetype.startsWith('image/');
     const endpoint = isImage ? '/api/sendImage' : '/api/sendFile';
+    const resolvedSession = session || this.wahaSession;
     try {
       const response = await axios.post(
         `${this.wahaApiUrl}${endpoint}`,
         {
-          session: this.wahaSession,
+          session: resolvedSession,
           chatId,
           file: { mimetype, filename, data: base64Data },
           caption: caption || '',
@@ -331,12 +338,13 @@ export class WhatsappService {
     }
   }
 
-  private async wahaSendText(to: string, text: string) {
+  private async wahaSendText(to: string, text: string, session?: string) {
     const chatId = to.includes('@') ? to : `${to}@c.us`;
+    const resolvedSession = session || this.wahaSession;
     try {
       const response = await axios.post(
         `${this.wahaApiUrl}/api/sendText`,
-        { session: this.wahaSession, chatId, text },
+        { session: resolvedSession, chatId, text },
         { headers: this.wahaHeaders() },
       );
 
@@ -364,15 +372,16 @@ export class WhatsappService {
     }
   }
 
-  private async wahaMarkAsRead(messageId: string) {
+  private async wahaMarkAsRead(messageId: string, session?: string) {
     try {
       // Extract chatId from messageId (format: true_phone@c.us_ID)
       const parts = messageId.split('_');
       const chatId = parts.length >= 2 ? parts[1] : messageId;
+      const resolvedSession = session || this.wahaSession;
 
       await axios.post(
         `${this.wahaApiUrl}/api/sendSeen`,
-        { session: this.wahaSession, chatId },
+        { session: resolvedSession, chatId },
         { headers: this.wahaHeaders() },
       );
     } catch (error: any) {

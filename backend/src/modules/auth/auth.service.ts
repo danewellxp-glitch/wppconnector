@@ -74,6 +74,7 @@ export class AuthService {
         role: true,
         companyId: true,
         departmentId: true,
+        activeDepartmentIds: true,
         isActive: true,
       },
     });

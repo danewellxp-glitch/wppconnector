@@ -11,9 +11,12 @@ async function bootstrap() {
   if (!fs.existsSync(uploadsPath))
     fs.mkdirSync(uploadsPath, { recursive: true });
 
+  const rawOrigins = process.env.FRONTEND_URL || 'http://192.168.10.156:3100';
+  const allowedOrigins = rawOrigins.split(',').map((o) => o.trim()).filter(Boolean);
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://192.168.10.156:3100',
+      origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
       credentials: true,
     },
   });

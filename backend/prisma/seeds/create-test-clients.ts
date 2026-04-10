@@ -221,9 +221,10 @@ async function main() {
           // Criar ou atualizar conversa
           const conversation = await prisma.conversation.upsert({
             where: {
-              companyId_customerPhone: {
+              companyId_customerPhone_wahaSession: {
                 companyId: company.id,
                 customerPhone: client.phone,
+  wahaSession: 'default',
               },
             },
             update: {

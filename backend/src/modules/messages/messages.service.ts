@@ -268,20 +268,30 @@ export class MessagesService {
       });
     }
 
-    // Save incoming message
-    const message = await this.prisma.message.create({
-      data: {
-        companyId,
-        conversationId: conversation.id,
-        whatsappMessageId,
-        direction: 'INBOUND',
-        type: (type?.toUpperCase() as any) || 'TEXT',
-        content,
-        mediaUrl: mediaUrl || null,
-        status: 'DELIVERED',
-        ...(quotedMsg && { metadata: { quotedMsg } }),
-      },
-    });
+    // Save incoming message — try/catch handles race condition between webhook and
+    // polling both passing the findUnique check simultaneously (TOCTOU).
+    let message: any;
+    try {
+      message = await this.prisma.message.create({
+        data: {
+          companyId,
+          conversationId: conversation.id,
+          whatsappMessageId,
+          direction: 'INBOUND',
+          type: (type?.toUpperCase() as any) || 'TEXT',
+          content,
+          mediaUrl: mediaUrl || null,
+          status: 'DELIVERED',
+          ...(quotedMsg && { metadata: { quotedMsg } }),
+        },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        this.logger.warn("Race condition resolved for duplicate: " + whatsappMessageId);
+        return await this.prisma.message.findUnique({ where: { whatsappMessageId } });
+      }
+      throw error;
+    }
 
     // Auto-capture customer name from message content
     const extractedName =
