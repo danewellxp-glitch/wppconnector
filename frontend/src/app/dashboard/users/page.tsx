@@ -41,9 +41,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, UserX, UserCheck, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Pencil, UserX, UserCheck, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { ManageDepartmentsModal } from '@/components/users/ManageDepartmentsModal';
 
 export default function UsersPage() {
   const currentUser = useAuthStore((s) => s.user);
@@ -58,6 +59,7 @@ export default function UsersPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deactivatingUser, setDeactivatingUser] = useState<User | null>(null);
+  const [managingDeptsUser, setManagingDeptsUser] = useState<User | null>(null);
 
 
   // Create form state
@@ -226,7 +228,7 @@ export default function UsersPage() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Departamento</TableHead>
+                <TableHead>Setores</TableHead>
                 <TableHead>Perfil</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Acoes</TableHead>
@@ -237,7 +239,22 @@ export default function UsersPage() {
                 <TableRow key={user.id} className={!user.isActive ? 'opacity-50' : ''}>
                   <TableCell className="font-medium">{user.name}</TableCell>
                   <TableCell>{user.email}</TableCell>
-                  <TableCell>{user.department?.name || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {user.userDepartments && user.userDepartments.length > 0 ? (
+                        user.userDepartments.map(({ department }) => (
+                          <Badge
+                            key={department.id}
+                            style={{ backgroundColor: department.color || '#6366f1', color: '#fff', border: 'none' }}
+                          >
+                            {department.name}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Sem setor</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Badge variant={user.role === Role.ADMIN ? 'default' : 'secondary'}>
                       {user.role === Role.ADMIN ? 'Admin' : 'Atendente'}
@@ -248,7 +265,15 @@ export default function UsersPage() {
                       {user.isActive ? 'Ativo' : 'Inativo'}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right space-x-2">
+                  <TableCell className="text-right space-x-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Gerenciar setores"
+                      onClick={() => setManagingDeptsUser(user)}
+                    >
+                      <Building2 className="h-4 w-4 text-blue-500" />
+                    </Button>
                     {user.id !== currentUser?.id && (
                       <>
                         <Button
@@ -285,6 +310,14 @@ export default function UsersPage() {
           </Table>
         </div>
       )}
+
+      <ManageDepartmentsModal
+        user={managingDeptsUser}
+        onClose={() => setManagingDeptsUser(null)}
+        onUpdated={() => {
+          // keep modal open so admin can add/remove multiple; users list refetches via invalidation in modal
+        }}
+      />
 
       {/* Create User Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

@@ -1,52 +1,53 @@
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: wpp-postgres
+    container_name: wpp-dev-postgres
     environment:
-      POSTGRES_DB: whatsapp_db
-      POSTGRES_USER: whatsapp
-      POSTGRES_PASSWORD: dev_password
+      POSTGRES_DB: ${POSTGRES_DB:-whatsapp_db_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-whatsapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
     ports:
-      - "5434:5432"
+      - "5720:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - dev_postgres_data:/var/lib/postgresql/data
     networks:
-      - wpp-network
+      - wpp-dev-network
 
   redis:
     image: redis:7-alpine
-    container_name: wpp-redis
+    container_name: wpp-dev-redis
     command: redis-server --appendonly yes
     ports:
-      - "6380:6379"
+      - "5721:6379"
     volumes:
-      - redis_data:/data
+      - dev_redis_data:/data
     networks:
-      - wpp-network
+      - wpp-dev-network
 
   waha:
     image: devlikeapro/waha-plus:latest
-    container_name: wpp-waha
+    container_name: wpp-dev-waha
     ports:
-      - "3101:3000"
+      - "5722:3000"
     environment:
-      - WAHA_DASHBOARD_USERNAME=admin
-      - WAHA_DASHBOARD_PASSWORD=admin123
-      - WAHA_API_KEY=wpp_waha_dev_key_2024
-      - WHATSAPP_HOOK_URL=http://192.168.10.156:4000/webhooks/waha
+      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME:-admin}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD:-Le98yqbl@}
+      - WAHA_API_KEY=${WAHA_API_KEY:-wpp_waha_dev_key_2024}
+      - WHATSAPP_HOOK_URL=http://192.168.10.156:5723/webhooks/waha
       - WHATSAPP_HOOK_EVENTS=message,message.any,message.ack
-      - WHATSAPP_START_SESSION=default
+      - WHATSAPP_START_SESSION=default,default2,default3
       - WHATSAPP_DEFAULT_ENGINE=WEBJS
     volumes:
-      - waha_sessions:/app/.sessions
+      - dev_waha_sessions:/app/.sessions
     networks:
-      - wpp-network
+      - wpp-dev-network
 
 volumes:
-  postgres_data:
-  redis_data:
-  waha_sessions:
+  dev_postgres_data:
+  dev_redis_data:
+  dev_waha_sessions:
 
 networks:
-  wpp-network:
+  wpp-dev-network:
+    name: wpp-dev-network
     driver: bridge

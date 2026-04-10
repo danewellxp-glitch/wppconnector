@@ -93,7 +93,7 @@ async function main() {
 
   // Conversation 1 - Maria (active, assigned to agent1, 3 unread)
   const conv1 = await prisma.conversation.upsert({
-    where: { companyId_customerPhone: { companyId: company.id, customerPhone: '5511999001001' } },
+    where: { companyId_customerPhone_wahaSession: { companyId: company.id, customerPhone: '5511999001001', wahaSession: 'default'                    } },
     update: {},
     create: {
       companyId: company.id,
@@ -176,7 +176,7 @@ async function main() {
 
   // Conversation 2 - Joao (open, unassigned, 1 unread)
   const conv2 = await prisma.conversation.upsert({
-    where: { companyId_customerPhone: { companyId: company.id, customerPhone: '5511999002002' } },
+    where: { companyId_customerPhone_wahaSession: { companyId: company.id, customerPhone: '5511999002002', wahaSession: 'default' } },
     update: {},
     create: {
       companyId: company.id,
@@ -204,7 +204,7 @@ async function main() {
 
   // Conversation 3 - Ana (assigned to agent2, resolved flow)
   const conv3 = await prisma.conversation.upsert({
-    where: { companyId_customerPhone: { companyId: company.id, customerPhone: '5511999003003' } },
+    where: { companyId_customerPhone_wahaSession: { companyId: company.id, customerPhone:         '5511999003003', wahaSession: 'default' } },
     update: {},
     create: {
       companyId: company.id,
@@ -272,7 +272,7 @@ async function main() {
 
   // Conversation 4 - Carlos (open, no messages yet - just initiated)
   const conv4 = await prisma.conversation.upsert({
-    where: { companyId_customerPhone: { companyId: company.id, customerPhone: '5511999004004' } },
+    where: { companyId_customerPhone_wahaSession: { companyId: company.id, customerPhone: '5511999004004', wahaSession: 'default' } },
     update: {},
     create: {
       companyId: company.id,
@@ -308,7 +308,7 @@ async function main() {
 
   // Conversation 5 - Resolved conversation
   const conv5 = await prisma.conversation.upsert({
-    where: { companyId_customerPhone: { companyId: company.id, customerPhone: '5511999005005' } },
+    where: { companyId_customerPhone_wahaSession: { companyId: company.id, customerPhone: '5511999005005', wahaSession: 'default' } },
     update: {},
     create: {
       companyId: company.id,

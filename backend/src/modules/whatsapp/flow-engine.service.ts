@@ -9,9 +9,11 @@ import { WebsocketGateway } from '../websocket/websocket.gateway';
  * Maps user input to department slugs.
  * Numbers match the order in the default greeting:
  *   1 - Laboratório
- *   2 - Comercial
- *   3 - Financeiro
- *   4 - Administrativo
+ *   2 - Vendas (Thays)
+ *   3 - Compras - Rose (Manutenção)
+ *   4 - Compras Thays (Insumos/Matéria Prima)
+ *   5 - Produção
+ *   6 - Falar com um Atendente (Administrativo)
  */
 const MENU_ALIASES: Record<string, string> = {
   // Laboratório
@@ -23,36 +25,56 @@ const MENU_ALIASES: Record<string, string> = {
   qualidade: 'laboratorio',
   tecnico: 'laboratorio',
 
-  // Comercial
-  '2': 'comercial',
-  comercial: 'comercial',
-  vendas: 'comercial',
-  venda: 'comercial',
-  pedido: 'comercial',
-  cotacao: 'comercial',
-  compra: 'comercial',
-  preco: 'comercial',
+  // Vendas — Thays
+  '2': 'vendas',
+  vendas: 'vendas',
+  venda: 'vendas',
+  comercial: 'vendas',
+  pedido: 'vendas',
+  cotacao: 'vendas',
+  amostra: 'vendas',
+  entrega: 'vendas',
+  preco: 'vendas',
 
-  // Financeiro
-  '3': 'financeiro',
-  financeiro: 'financeiro',
-  financ: 'financeiro',
-  boleto: 'financeiro',
-  nota: 'financeiro',
-  nf: 'financeiro',
-  pagamento: 'financeiro',
-  fatura: 'financeiro',
-  cobranca: 'financeiro',
+  // Compras - Rose (Manutenção)
+  '3': 'compras-rose',
+  financeiro: 'compras-rose',
+  financ: 'compras-rose',
+  boleto: 'compras-rose',
+  nota: 'compras-rose',
+  nf: 'compras-rose',
+  pagamento: 'compras-rose',
+  fatura: 'compras-rose',
+  cobranca: 'compras-rose',
+  conciliacao: 'compras-rose',
+  manutencao: 'compras-rose',
 
-  // Administrativo (root dept — fallback)
-  '4': 'administrativo',
-  adm: 'administrativo',
-  admin: 'administrativo',
-  administrativo: 'administrativo',
-  rh: 'administrativo',
-  'recursos humanos': 'administrativo',
-  fornecedor: 'administrativo',
-  geral: 'administrativo',
+  // Compras Thays (Insumos/Matéria Prima)
+  '4': 'compras-thays',
+  insumo: 'compras-thays',
+  insumos: 'compras-thays',
+  materia: 'compras-thays',
+  'materia prima': 'compras-thays',
+
+  // Produção
+  '5': 'producao',
+  producao: 'producao',
+  fabricacao: 'producao',
+  processo: 'producao',
+
+  // Falar com um Atendente
+  '6': 'atendente',
+  atendente: 'atendente',
+  humano: 'atendente',
+  falar: 'atendente',
+  pessoa: 'atendente',
+  adm: 'atendente',
+  admin: 'atendente',
+  administrativo: 'atendente',
+  rh: 'atendente',
+  'recursos humanos': 'atendente',
+  fornecedor: 'atendente',
+  geral: 'atendente',
 };
 
 function normalizeInput(input: string): string {
@@ -104,32 +126,16 @@ export class FlowEngineService {
 
   /**
    * Resolve the department slug to the actual department for a given company.
-   * If the exact slug is not found, falls back to the root (isRoot=true) department.
    */
   async resolveDepartmentSlug(
     companyId: string,
     slug: string,
   ): Promise<{ id: string; slug: string; name: string } | null> {
-    // Try exact slug match first
     const dept = await this.prisma.department.findFirst({
       where: { companyId, slug, isActive: true },
       select: { id: true, slug: true, name: true },
     });
     if (dept) return dept;
-
-    // If slug is 'administrativo' and not found, fall back to root department
-    if (slug === 'administrativo') {
-      const root = await this.prisma.department.findFirst({
-        where: { companyId, isRoot: true, isActive: true },
-        select: { id: true, slug: true, name: true },
-      });
-      if (root) {
-        this.logger.log(
-          `[FLOW] Slug 'administrativo' not found for company ${companyId}, using root dept: ${root.name} (${root.slug})`,
-        );
-        return root;
-      }
-    }
 
     this.logger.warn(
       `[FLOW] No department found for slug '${slug}' in company ${companyId}`,
@@ -140,13 +146,14 @@ export class FlowEngineService {
   getDefaultGreeting(companyName: string): string {
     return (
       `Olá! 👋 Seja bem-vindo(a) à *SIM Estearina*!\n\n` +
-      `Somos fabricantes de insumos oleoquímicos com mais de 20 anos de experiência. Como podemos te ajudar hoje?\n\n` +
-      `Por favor, digite o *número* da área desejada:\n\n` +
-      `*1️⃣ - Laboratório*\nAnálises, laudos técnicos, controle de qualidade e especificações de produtos.\n\n` +
-      `*2️⃣ - Comercial*\nPedidos, cotações, disponibilidade de produtos e novos negócios.\n\n` +
-      `*3️⃣ - Financeiro*\nBoletos, notas fiscais, prazo de pagamento e questões financeiras.\n\n` +
-      `*4️⃣ - Administrativo*\nDemais assuntos, fornecedores, recursos humanos e informações gerais.\n\n` +
-      `_Nosso horário de atendimento é de segunda a sexta, das 8h às 18h._`
+      `Como podemos te ajudar hoje? Por favor, digite o *número* da área desejada:\n\n` +
+      `*1️⃣ Laboratório*\nAnálises técnicas, laudos, controle de qualidade, especificações e certificados de produtos.\n\n` +
+      `*2️⃣ Vendas — Thays*\nPedidos, cotações, disponibilidade de produtos, amostras, novos negócios e prazo de entrega.\n\n` +
+      `*3️⃣ Compras - Rose (Manutenção)*\nBoletos, notas fiscais, prazos de pagamento, conciliações e questões financeiras.\n\n` +
+      `*4️⃣ Compras Thays (Insumos/Matéria Prima)*\n\n` +
+      `*5️⃣ Produção*\nProcesso produtivo, questões técnicas de fabricação.\n\n` +
+      `*6️⃣ Falar com um Atendente 👤*\nTransferência direta para um atendente humano disponível.\n\n` +
+      `_⏰ Nosso horário de atendimento é de segunda a sexta, das 8h às 18h._`
     );
   }
 
@@ -213,6 +220,7 @@ export class FlowEngineService {
       fullConv.company.whatsappPhoneNumberId,
       sendTo,
       text,
+      fullConv.wahaSession,
     );
 
     await this.prisma.message.create({
@@ -259,6 +267,7 @@ export class FlowEngineService {
       fullConv.company.whatsappPhoneNumberId,
       sendTo,
       text,
+      fullConv.wahaSession,
     );
 
     await this.prisma.message.create({
@@ -290,7 +299,7 @@ export class FlowEngineService {
     const meta = (fullConv.metadata as any) || {};
     const sendTo = meta.chatId || fullConv.customerPhone;
 
-    const invalidText = 'Opção inválida. Por favor escolha 1, 2, 3 ou 4.';
+    const invalidText = 'Opção inválida. Por favor escolha 1, 2, 3, 4, 5 ou 6.';
     const menuText = this.getDefaultGreeting(fullConv.company.name);
 
     // Emit bot typing indicator
@@ -302,6 +311,7 @@ export class FlowEngineService {
       fullConv.company.whatsappPhoneNumberId,
       sendTo,
       invalidText,
+      fullConv.wahaSession,
     );
     await this.prisma.message.create({
       data: {
@@ -323,6 +333,7 @@ export class FlowEngineService {
       fullConv.company.whatsappPhoneNumberId,
       sendTo,
       menuText,
+      fullConv.wahaSession,
     );
     await this.prisma.message.create({
       data: {

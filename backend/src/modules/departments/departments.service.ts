@@ -12,7 +12,7 @@ export class DepartmentsService {
       include: {
         _count: {
           select: {
-            users: true,
+            activeUsers: true,
             conversations: {
               where: {
                 flowState: { in: ['DEPARTMENT_SELECTED', 'ASSIGNED'] },

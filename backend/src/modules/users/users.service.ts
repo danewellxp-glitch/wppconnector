@@ -18,7 +18,12 @@ export class UsersService {
         name: true,
         role: true,
         departmentId: true,
-        department: { select: { name: true } },
+        department: { select: { id: true, name: true, color: true } },
+        userDepartments: {
+          select: {
+            department: { select: { id: true, name: true, color: true } },
+          },
+        },
         isActive: true,
         createdAt: true,
       },
@@ -89,6 +94,7 @@ export class UsersService {
         email: true,
         name: true,
         role: true,
+        departmentId: true,
         isActive: true,
       },
     });
@@ -106,6 +112,41 @@ export class UsersService {
         isActive: true,
       },
     });
+  }
+
+  // ===== Department Membership =====
+
+  async getUserDepartments(userId: string) {
+    const entries = await this.prisma.userDepartment.findMany({
+      where: { userId },
+      select: { department: { select: { id: true, name: true, color: true } } },
+    });
+    return entries.map((entry) => entry.department);
+  }
+
+  async addUserDepartment(userId: string, departmentId: string) {
+    // Verify both exist
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Usuario nao encontrado');
+
+    const dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
+    if (!dept) throw new NotFoundException('Departamento nao encontrado');
+
+    await this.prisma.userDepartment.upsert({
+      where: { userId_departmentId: { userId, departmentId } },
+      create: { userId, departmentId },
+      update: {},
+    });
+
+    return this.getUserDepartments(userId);
+  }
+
+  async removeUserDepartment(userId: string, departmentId: string) {
+    await this.prisma.userDepartment.deleteMany({
+      where: { userId, departmentId },
+    });
+
+    return this.getUserDepartments(userId);
   }
 
   // ===== Password Resets =====

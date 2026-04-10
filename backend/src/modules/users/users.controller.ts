@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -58,6 +59,36 @@ export class UsersController {
   @Roles(Role.ADMIN)
   remove(@Param('id') id: string) {
     return this.usersService.remove(id);
+  }
+
+  // ===== Department Membership =====
+
+  // Any authenticated user can read their own departments
+  @Get('me/departments')
+  getMyDepartments(@CurrentUser() user: any) {
+    return this.usersService.getUserDepartments(user.id);
+  }
+
+  // Admin can read any user's departments
+  @Get(':id/departments')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getUserDepartments(@Param('id') id: string) {
+    return this.usersService.getUserDepartments(id);
+  }
+
+  @Post(':id/departments/:deptId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  addUserDepartment(@Param('id') id: string, @Param('deptId') deptId: string) {
+    return this.usersService.addUserDepartment(id, deptId);
+  }
+
+  @Delete(':id/departments/:deptId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  removeUserDepartment(@Param('id') id: string, @Param('deptId') deptId: string) {
+    return this.usersService.removeUserDepartment(id, deptId);
   }
 
   // ===== Password Resets =====

@@ -110,11 +110,25 @@ export class DepartmentRoutingService {
       return conversationId;
     }
 
-    // Setor sem agentes cadastrados — redirecionar para Admin
+    // Setor sem agentes disponíveis — manter na fila do próprio setor
     this.logger.log(
-      `[ROUTING] Setor ${dept.name} sem agentes cadastrados. Redirecionando para Admin.`,
+      `[ROUTING] Setor ${dept.name} sem agentes disponíveis. Mantendo na fila do setor.`,
     );
-    await this.redirectToAdmin(conversationId, companyId, 'offline');
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        flowState: 'DEPARTMENT_SELECTED',
+        assignedUserId: null,
+        timeoutAt: null,
+        status: 'OPEN',
+      },
+    });
+    if (gateway) {
+      gateway.emitToDepartment(dept.id, 'conversation-queued', {
+        conversationId,
+        reason: 'offline',
+      });
+    }
     return conversationId;
   }
 
@@ -253,15 +267,10 @@ export class DepartmentRoutingService {
       }
     }
 
-    const adminDept = await this.prisma.department.findFirst({
-      where: { isRoot: true, isActive: true },
-    });
-
     const timedOut = await this.prisma.conversation.findMany({
       where: {
         flowState: 'DEPARTMENT_SELECTED',
         timeoutAt: { lt: new Date() },
-        departmentId: { not: adminDept?.id }, // Don't redirect if already in Admin
       },
       include: { company: true, department: true },
     });
@@ -269,11 +278,34 @@ export class DepartmentRoutingService {
     if (timedOut.length === 0) return;
 
     this.logger.log(
-      `[TIMEOUT] ${timedOut.length} conversa(s) com timeout. Redirecionando...`,
+      `[TIMEOUT] ${timedOut.length} conversa(s) com timeout. Mantendo no departamento original...`,
     );
 
     for (const conv of timedOut) {
-      await this.redirectToAdmin(conv.id, conv.companyId, 'timeout');
+      // Keep the conversation in its own department — no redirect to root.
+      // Clear the timeout so the polling loop doesn't fire again.
+      await this.prisma.conversation.update({
+        where: { id: conv.id },
+        data: {
+          flowState: 'DEPARTMENT_SELECTED',
+          assignedUserId: null,
+          timeoutAt: null,
+          status: 'OPEN',
+        },
+      });
+
+      const gateway = this.getWebsocketGateway();
+      if (gateway) {
+        gateway.emitToCompany(conv.companyId, 'conversation-queued', {
+          conversationId: conv.id,
+          departmentId: conv.departmentId,
+          reason: 'timeout',
+        });
+      }
+
+      this.logger.log(
+        `[TIMEOUT] Conversa ${conv.id} mantida em ${conv.department?.name || conv.departmentId}`,
+      );
     }
   }
 
@@ -405,6 +437,7 @@ export class DepartmentRoutingService {
           conv.company.whatsappPhoneNumberId,
           to,
           text,
+          conv.wahaSession,
         );
       }
     } catch (err) {

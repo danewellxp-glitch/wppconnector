@@ -20,6 +20,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
   private readonly wahaApiUrl: string;
   private readonly wahaApiKey: string;
   private readonly wahaSession: string;
+  private readonly wahaSessions: string[];
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private polling = false;
 
@@ -42,6 +43,9 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
     this.wahaApiKey = this.configService.get<string>('WAHA_API_KEY') || '';
     this.wahaSession =
       this.configService.get<string>('WAHA_SESSION') || 'default';
+    const sessionsEnv =
+      this.configService.get<string>('WAHA_SESSIONS') || this.wahaSession;
+    this.wahaSessions = sessionsEnv.split(',').map((s) => s.trim());
     this.backendUrl =
       this.configService.get<string>('BACKEND_URL') ||
       'http://192.168.10.156:4000';
@@ -65,7 +69,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     if (this.provider !== 'WAHA') return;
     this.logger.log('Starting WAHA polling (every 5s)...');
-    this.intervalId = setInterval(() => this.poll(), 5000);
+    this.intervalId = setInterval(() => this.poll(), 30000);
   }
 
   onModuleDestroy() {
@@ -83,12 +87,28 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
     if (this.polling) return;
     this.polling = true;
     try {
+      const company = await this.prisma.company.findFirst();
+      if (!company) {
+        this.polling = false;
+        return;
+      }
+
+      for (const session of this.wahaSessions) {
+        await this.pollSession(session, company);
+      }
+    } catch (error: any) {
+      this.logger.error(`Polling error: ${error.code || ''} ${error.message}`);
+    }
+    this.polling = false;
+  }
+
+  private async pollSession(session: string, company: any) {
+    try {
       this.logger.debug(
-        `Polling ${this.wahaApiUrl}/api/${this.wahaSession}/chats/overview`,
+        `Polling ${this.wahaApiUrl}/api/${session}/chats/overview`,
       );
-      // Get chats with unread messages
       const res = await axios.get(
-        `${this.wahaApiUrl}/api/${this.wahaSession}/chats/overview`,
+        `${this.wahaApiUrl}/api/${session}/chats/overview`,
         {
           params: { limit: 50 },
           headers: this.wahaHeaders(),
@@ -96,7 +116,6 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
       );
 
       const chats: any[] = res.data || [];
-      // WAHA overview returns unreadCount (and sometimes isGroup) inside _chat
       const unreadChats = chats
         .map((c: any) => ({
           ...c,
@@ -105,37 +124,38 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         }))
         .filter((c: any) => c.unreadCount > 0 && !c.isGroup);
 
-      if (unreadChats.length === 0) {
-        this.polling = false;
-        return;
-      }
+      if (unreadChats.length === 0) return;
 
-      this.logger.log(`Found ${unreadChats.length} chats with unread messages`);
-
-      const company = await this.prisma.company.findFirst();
-      if (!company) {
-        this.polling = false;
-        return;
-      }
+      this.logger.log(
+        `[${session}] Found ${unreadChats.length} chats with unread messages`,
+      );
 
       for (const chat of unreadChats) {
-        await this.processChat(chat, company);
+        await this.processChat(chat, company, session);
       }
     } catch (error: any) {
-      this.logger.error(`Polling error: ${error.code || ''} ${error.message}`);
+      this.logger.error(
+        `[${session}] Polling error: ${error.code || ''} ${error.message}`,
+      );
     }
-    this.polling = false;
   }
 
-  private async processChat(chat: any, company: any) {
+  private async processChat(chat: any, company: any, session = 'default') {
     try {
       const chatId =
         typeof chat.id === 'string' ? chat.id : chat.id?._serialized || '';
       if (!chatId) return;
 
+      // Skip @lid chats — WAHA returns 500 for these endpoints.
+      // These messages are handled correctly by the webhook.
+      if (chatId.includes('@lid')) {
+        this.logger.debug("[" + session + "] Skipping @lid chat " + chatId + " — handled by webhook");
+        return;
+      }
+
       // Fetch recent messages for this chat
       const msgRes = await axios.get(
-        `${this.wahaApiUrl}/api/${this.wahaSession}/chats/${encodeURIComponent(chatId)}/messages`,
+        `${this.wahaApiUrl}/api/${session}/chats/${encodeURIComponent(chatId)}/messages`,
         {
           params: { limit: chat.unreadCount, downloadMedia: true },
           headers: this.wahaHeaders(),
@@ -163,18 +183,25 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         // Resolve LID to real phone
         let customerPhone = chatId;
         let contactProfile: any = null;
+        let contactInfo: any = null;
 
-        const contactInfo = await this.whatsappService.getContactInfo(chatId);
-        if (contactInfo?.number) {
-          customerPhone = contactInfo.number;
-          contactProfile = {
-            pushname: contactInfo.pushname,
-            name: contactInfo.name,
-            isBusiness: contactInfo.isBusiness,
-            profilePictureURL: contactInfo.profilePictureURL,
-          };
-          this.logger.log(
-            `Resolved ${chatId} → ${customerPhone} (${contactInfo.pushname || 'no name'})`,
+        try {
+          contactInfo = await this.whatsappService.getContactInfo(chatId, session);
+          if (contactInfo?.number) {
+            customerPhone = contactInfo.number;
+            contactProfile = {
+              pushname: contactInfo.pushname,
+              name: contactInfo.name,
+              isBusiness: contactInfo.isBusiness,
+              profilePictureURL: contactInfo.profilePictureURL,
+            };
+            this.logger.log(
+              `Resolved ${chatId} → ${customerPhone} (${contactInfo.pushname || 'no name'})`,
+            );
+          }
+        } catch (err: any) {
+          this.logger.warn(
+            `[${session}] Não foi possível resolver contato ${chatId}: ${err.message}. Usando ID bruto.`,
           );
         }
 
@@ -268,7 +295,11 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           customerName,
           chatId,
           contactProfile,
+          session,
         );
+
+        // Re-fetch para garantir estado atualizado (webhook pode ter alterado entre o fetch e agora)
+        conversation = (await this.prisma.conversation.findUnique({ where: { id: conversation.id } })) ?? conversation;
 
         // Reabrir conversa resolvida
         if (conversation.status === 'RESOLVED') {
@@ -291,39 +322,8 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (conversation.flowState === 'GREETING') {
-          if (!conversation.greetingSentAt) {
-            // Claim atômico: evita duplicidade com o webhook processando o mesmo evento
-            const claimed = await this.prisma.conversation.updateMany({
-              where: { id: conversation.id, flowState: 'GREETING', greetingSentAt: null },
-              data: { greetingSentAt: new Date() },
-            });
-            if (claimed.count > 0) {
-              await this.flowEngineService.sendGreeting(conversation);
-            }
-          } else {
-            const body = (msg.body || '').trim();
-            const slugHint = this.flowEngineService.processMenuChoice(body);
-            if (slugHint) {
-              const resolvedDept =
-                await this.flowEngineService.resolveDepartmentSlug(
-                  company.id,
-                  slugHint,
-                );
-              if (resolvedDept) {
-                await this.departmentRoutingService.routeToDepartment(
-                  conversation.id,
-                  resolvedDept.slug,
-                  company.id,
-                );
-              } else {
-                await this.flowEngineService.handleInvalidChoice(conversation);
-              }
-            } else {
-              await this.flowEngineService.handleInvalidChoice(conversation);
-            }
-          }
-          // Salvar a mensagem ANTES de continuar — garante idempotência no próximo ciclo
-          // (sem isso, markAsRead falhar causa reprocessamento a cada 5s → loop de "indisponíveis")
+          // Salvar a mensagem PRIMEIRO — garante idempotência no próximo ciclo
+          // mesmo que o envio de resposta falhe (ex: @lid não resolvível pelo WAHA)
           await this.messagesService.handleIncomingMessage(
             company.id,
             customerPhone,
@@ -335,7 +335,48 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             chatId,
             contactProfile,
             quotedMsg,
+            session,
           );
+
+          if (!conversation.greetingSentAt) {
+            // Claim atômico: evita duplicidade com o webhook processando o mesmo evento
+            const claimed = await this.prisma.conversation.updateMany({
+              where: { id: conversation.id, flowState: 'GREETING', greetingSentAt: null },
+              data: { greetingSentAt: new Date() },
+            });
+            if (claimed.count > 0) {
+              try {
+                await this.flowEngineService.sendGreeting(conversation);
+              } catch (err: any) {
+                this.logger.warn(`[${session}] Falha ao enviar saudação para ${customerPhone}: ${err.message}`);
+              }
+            }
+          } else {
+            const body = (msg.body || '').trim();
+            const slugHint = this.flowEngineService.processMenuChoice(body);
+            try {
+              if (slugHint) {
+                const resolvedDept =
+                  await this.flowEngineService.resolveDepartmentSlug(
+                    company.id,
+                    slugHint,
+                  );
+                if (resolvedDept) {
+                  await this.departmentRoutingService.routeToDepartment(
+                    conversation.id,
+                    resolvedDept.slug,
+                    company.id,
+                  );
+                } else {
+                  await this.flowEngineService.handleInvalidChoice(conversation);
+                }
+              } else {
+                await this.flowEngineService.handleInvalidChoice(conversation);
+              }
+            } catch (err: any) {
+              this.logger.warn(`[${session}] Falha ao processar menu para ${customerPhone}: ${err.message}`);
+            }
+          }
           continue;
         }
 
@@ -372,6 +413,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             chatId,
             contactProfile,
             quotedMsg,
+            session,
           );
           continue;
         }
@@ -395,6 +437,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             chatId,
             contactProfile,
             quotedMsg,
+            session,
           );
           continue;
         }
@@ -410,13 +453,14 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           chatId,
           contactProfile,
           quotedMsg,
+          session,
         );
       }
 
       // Mark chat as read in WAHA
       try {
         await axios.post(
-          `${this.wahaApiUrl}/api/${this.wahaSession}/chats/${encodeURIComponent(chatId)}/messages/read`,
+          `${this.wahaApiUrl}/api/${session}/chats/${encodeURIComponent(chatId)}/messages/read`,
           {},
           { headers: this.wahaHeaders() },
         );
