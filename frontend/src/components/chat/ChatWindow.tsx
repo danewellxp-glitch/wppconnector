@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { useMessages } from '@/hooks/useMessages';
 import { useSocket } from '@/hooks/useSocket';
@@ -9,7 +9,7 @@ import { MessageInput } from './MessageInput';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Phone, MessageSquare, Paperclip } from 'lucide-react';
+import { Phone, MessageSquare, Paperclip, ChevronUp, Loader2 } from 'lucide-react';
 import apiClient from '@/lib/api-client';
 import { cleanPhone } from '@/lib/utils';
 
@@ -28,6 +28,9 @@ export function ChatWindow() {
   const { joinConversation, leaveConversation } = useSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const prevScrollHeightRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const isLoadingMoreRef = useRef(false);
 
   const [droppedFile, setDroppedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -35,7 +38,17 @@ export function ChatWindow() {
 
   const conversation = conversations.find((c) => c.id === selectedId);
 
-  useMessages(selectedId);
+  const { hasMore, isLoadingMore, loadOlderMessages } = useMessages(selectedId);
+
+  // Keep refs in sync so scroll handler has fresh values without stale closure
+  useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
+  useEffect(() => { isLoadingMoreRef.current = isLoadingMore; }, [isLoadingMore]);
+
+  const handleLoadOlder = useCallback(async () => {
+    if (!scrollRef.current) return;
+    prevScrollHeightRef.current = scrollRef.current.scrollHeight;
+    await loadOlderMessages();
+  }, [loadOlderMessages]);
 
   // Join/leave conversation room
   useEffect(() => {
@@ -43,6 +56,7 @@ export function ChatWindow() {
     joinConversation(selectedId);
     clearTyping(selectedId);
     isAtBottomRef.current = true;
+    prevScrollHeightRef.current = 0;
 
     // Reset badge immediately and notify server
     resetUnread(selectedId);
@@ -53,18 +67,33 @@ export function ChatWindow() {
     };
   }, [selectedId]);
 
-  // Track if user is near the bottom
+  // Track scroll: bottom detection + auto-load older when near top
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const handleScroll = () => {
       isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+      if (el.scrollTop < 80 && hasMoreRef.current && !isLoadingMoreRef.current) {
+        prevScrollHeightRef.current = el.scrollHeight;
+        loadOlderMessages();
+      }
     };
     el.addEventListener('scroll', handleScroll, { passive: true });
     return () => el.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [loadOlderMessages]);
 
-  // Auto-scroll: always on conversation switch, only if at bottom on new messages
+  // After older messages are prepended: restore scroll position so view doesn't jump
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || prevScrollHeightRef.current === 0) return;
+    const delta = el.scrollHeight - prevScrollHeightRef.current;
+    if (delta > 0) {
+      el.scrollTop = delta;
+      prevScrollHeightRef.current = 0;
+    }
+  }, [messages]);
+
+  // Auto-scroll to bottom: on conversation switch (always) or new message (if at bottom)
   useEffect(() => {
     if (!scrollRef.current) return;
     if (isAtBottomRef.current) {
@@ -193,6 +222,28 @@ export function ChatWindow() {
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+        {/* Load older messages controls */}
+        {messages.length > 0 && (
+          <div className="flex justify-center mb-3">
+            {isLoadingMore ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-white rounded-full px-3 py-1.5 shadow-sm border">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Carregando mensagens anteriores...
+              </div>
+            ) : hasMore ? (
+              <button
+                onClick={handleLoadOlder}
+                className="flex items-center gap-1.5 text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 rounded-full px-3 py-1.5 transition-colors"
+              >
+                <ChevronUp className="h-3 w-3" />
+                Carregar mensagens anteriores
+              </button>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/50">Início da conversa</span>
+            )}
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Nenhuma mensagem ainda

@@ -208,12 +208,13 @@ export class WahaWebhookController {
         // Caso 2: WAHA enviou URL. Em vez de proxy, vamos baixar e salvar o arquivo
         // para garantir que replays funcionem corretamente e a URL não expire.
         try {
-          // Se for uma URL do WAHA, ele precisa do acesso (e pode precisar do backend rodando)
-          // Mas como o WAHA está na mesma rede/máquina, vamos tentar baixar o buffer
           const axios = require('axios');
           const wahaApiKey = process.env.WAHA_API_KEY || '';
           const wahaHeaders = wahaApiKey ? { 'X-Api-Key': wahaApiKey } : {};
-          const response = await axios.get(originalMediaUrl, { responseType: 'arraybuffer', headers: wahaHeaders });
+          // WAHA envia URLs internas com localhost:3000 — substitui pela URL real do WAHA
+          const wahaApiUrl = process.env.WAHA_API_URL || 'http://192.168.10.156:5722';
+          const downloadUrl = originalMediaUrl.replace(/https?:\/\/localhost:\d+/, wahaApiUrl);
+          const response = await axios.get(downloadUrl, { responseType: 'arraybuffer', headers: wahaHeaders });
           const buffer = Buffer.from(response.data);
 
           let ext = mimetype.split('/')[1]?.split(';')[0];
@@ -295,7 +296,6 @@ export class WahaWebhookController {
           assignedAt: null,
           departmentId: null,
           routedAt: null,
-          timeoutAt: null,
         },
       });
     }

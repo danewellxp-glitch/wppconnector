@@ -12,8 +12,6 @@ import { WebsocketGateway } from '../websocket/websocket.gateway';
 @Injectable()
 export class ConversationRoutingService {
   private readonly logger = new Logger(ConversationRoutingService.name);
-  private readonly SUGGESTION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-
   constructor(
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
@@ -32,17 +30,25 @@ export class ConversationRoutingService {
     companyId: string,
   ): Promise<boolean> {
     try {
-      // Buscar último atendimento do cliente
-      const previousConversation = await this.prisma.conversation.findFirst({
+      // Buscar último atendimento do cliente — primeiro tenta outra conversa,
+      // depois tenta a própria conversa atual (caso de reopen da mesma conversa)
+      let previousConversation = await this.prisma.conversation.findFirst({
         where: {
           companyId,
           customerPhone,
           lastAttendedAt: { not: null },
-          id: { not: conversationId }, // Não a conversa atual
+          id: { not: conversationId },
         },
         orderBy: { lastAttendedAt: 'desc' },
         include: { department: true, assignedUser: true },
       });
+
+      if (!previousConversation) {
+        previousConversation = await this.prisma.conversation.findFirst({
+          where: { id: conversationId, lastDepartmentId: { not: null } },
+          include: { department: true, assignedUser: true },
+        });
+      }
 
       if (!previousConversation || !previousConversation.lastDepartmentId) {
         this.logger.log(
@@ -85,9 +91,6 @@ export class ConversationRoutingService {
       this.logger.log(
         `[ROUTING] Sugestão enviada para cliente ${customerPhone} - setor ${lastDept.name}`,
       );
-
-      // Agendar timeout de 2 minutos
-      this.scheduleRoutingTimeout(conversationId, lastDept.id, companyId);
 
       return true;
     } catch (error) {
@@ -181,7 +184,7 @@ export class ConversationRoutingService {
 
       await this.sendWhatsAppToConversation(
         conversationId,
-        'Entendido! Voltando ao menu inicial... \n\nEscolha uma opção:\n1️⃣ Laboratório\n2️⃣ Administrativo\n3️⃣ Comercial\n4️⃣ Financeiro',
+        'Entendido! Voltando ao menu inicial...\n\n1️⃣ Laboratório\n\n2️⃣ Vendas — Thays\n\n3️⃣ Compras - Rose (Manutenção)\n\n4️⃣ Compras Thays (Insumos/Matéria Prima)\n\n5️⃣ Produção\n\n6️⃣ Falar com um Atendente 👤\n\n_⏰ Nosso horário de atendimento é de segunda a sexta, das 8h às 18h._',
       );
 
       return { accepted: false };
@@ -193,53 +196,6 @@ export class ConversationRoutingService {
     );
 
     return { accepted: false };
-  }
-
-  /**
-   * Agendar timeout de 2 minutos para roteamento sugerido
-   * Se cliente não responde, usa fluxo padrão
-   */
-  private scheduleRoutingTimeout(
-    conversationId: string,
-    suggestedDepartmentId: string,
-    companyId: string,
-  ) {
-    setTimeout(async () => {
-      try {
-        const conversation = await this.prisma.conversation.findUnique({
-          where: { id: conversationId },
-        });
-
-        // Se ainda está aguardando confirmação, timeout expirou
-        if (conversation?.flowState === 'AWAITING_ROUTING_CONFIRMATION') {
-          this.logger.log(
-            `[ROUTING] Timeout de 2 minutos expirado para roteamento sugerido. Usando fluxo padrão.`,
-          );
-
-          // Voltar para GREETING para passar pelo menu normal
-          await this.prisma.conversation.update({
-            where: { id: conversationId },
-            data: {
-              flowState: 'GREETING',
-              metadata: {
-                ...((conversation.metadata as any) || {}),
-                routingTimeoutExpired: true,
-                routingTimeoutExpiredAt: new Date().toISOString(),
-              },
-            },
-          });
-
-          await this.sendWhatsAppToConversation(
-            conversationId,
-            'Tempo esgotado! Voltando ao menu inicial...\n\nEscolha uma opção:\n1️⃣ Laboratório\n2️⃣ Administrativo\n3️⃣ Comercial\n4️⃣ Financeiro',
-          );
-        }
-      } catch (error) {
-        this.logger.error(
-          `[ROUTING] Erro ao processar timeout de roteamento: ${error}`,
-        );
-      }
-    }, this.SUGGESTION_TIMEOUT_MS);
   }
 
   /**

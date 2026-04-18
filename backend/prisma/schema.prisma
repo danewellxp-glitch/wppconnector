@@ -45,7 +45,6 @@ model Department {
   color                  String   @default("#6366f1")
   isRoot                 Boolean  @default(false)
   isActive               Boolean  @default(true)
-  responseTimeoutMinutes Int      @default(3)
   maxAgents              Int      @default(2)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
@@ -115,7 +114,6 @@ model Conversation {
   flowState              FlowState          @default(GREETING)
   routedAt               DateTime?
   assignedAt             DateTime?
-  timeoutAt              DateTime?
   greetingSentAt         DateTime?
   lastMessageAt          DateTime           @default(now())
   unreadCount            Int                @default(0)

@@ -91,7 +91,6 @@ export class DepartmentsService {
       description?: string;
       color?: string;
       isRoot?: boolean;
-      responseTimeoutMinutes?: number;
       maxAgents?: number;
     },
   ) {
@@ -103,7 +102,6 @@ export class DepartmentsService {
         description: data.description,
         color: data.color ?? '#6366f1',
         isRoot: data.isRoot ?? false,
-        responseTimeoutMinutes: data.responseTimeoutMinutes ?? 3,
         maxAgents: data.maxAgents ?? 10,
       },
     });
@@ -119,7 +117,6 @@ export class DepartmentsService {
       color: string;
       isRoot: boolean;
       isActive: boolean;
-      responseTimeoutMinutes: number;
       maxAgents: number;
     }>,
   ) {

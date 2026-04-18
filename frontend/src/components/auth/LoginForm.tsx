@@ -75,6 +75,7 @@ export function LoginForm() {
         <div className="mx-auto mb-6 flex justify-center">
           <Image
             src="/Velocelogo.png"
+            unoptimized
             alt="Veloce Logo"
             width={517}
             height={173}
@@ -137,6 +138,32 @@ export function LoginForm() {
             >
               Problemas com o acesso? / Esqueci minha senha
             </button>
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-gray-100">
+            <p className="text-xs text-center text-muted-foreground mb-3">Ambiente de Demonstração</p>
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {[
+                { label: 'Admin', email: 'admin@simquimica.com.br' },
+                { label: 'Laboratório', email: 'laboratorio@simquimica.com.br' },
+                { label: 'Lab2', email: 'lab2@simquimica.com.br' },
+                { label: 'Compras', email: 'administrativo@simquimica.com.br' },
+                { label: 'Compras2', email: 'administrativo2@simquimica.com.br' },
+                { label: 'Vendas', email: 'vendas@simquimica.com.br' },
+                { label: 'Vendas2', email: 'vendas2@simquimica.com.br' },
+                { label: 'Financeiro', email: 'financeiro@simquimica.com.br' },
+                { label: 'Financeiro2', email: 'financeiro2@simquimica.com.br' },
+              ].map((u) => (
+                <button
+                  key={u.email}
+                  type="button"
+                  onClick={() => { setEmail(u.email); setPassword('Sim@2024'); }}
+                  className="text-xs border rounded-full px-3 py-1 hover:bg-gray-50 transition-colors text-gray-600"
+                >
+                  {u.label}
+                </button>
+              ))}
+            </div>
           </div>
         </form>
       </CardContent>

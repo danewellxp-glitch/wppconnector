@@ -266,16 +266,11 @@ async function main() {
               // Atualizar conversa com departamento
               const targetDept = deptMap.get(deptSlug);
               if (targetDept) {
-                const timeoutAt = new Date(
-                  Date.now() + targetDept.responseTimeoutMinutes * 60 * 1000,
-                );
-
                 await prisma.conversation.update({
                   where: { id: conversation.id },
                   data: {
                     departmentId: targetDept.id,
                     routedAt: new Date(),
-                    timeoutAt,
                     flowState: 'DEPARTMENT_SELECTED',
                   },
                 });

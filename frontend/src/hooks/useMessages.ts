@@ -5,45 +5,85 @@ import apiClient from '@/lib/api-client';
 import { Message, Direction, MessageType, MessageStatus } from '@/types/message';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuthStore } from '@/stores/authStore';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
+
+function dedup(list: Message[]): Message[] {
+  const seen = new Set<string>();
+  return list.filter((m) => {
+    if (seen.has(m.id)) return false;
+    seen.add(m.id);
+    return true;
+  });
+}
+
+function mergeSorted(base: Message[], extra: Message[]): Message[] {
+  const ids = new Set(base.map((m) => m.id));
+  return [...base, ...extra.filter((m) => !ids.has(m.id))].sort(
+    (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+  );
+}
 
 export function useMessages(conversationId: string | null) {
   const setMessages = useChatStore((s) => s.setMessages);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+
+  // Reset pagination state when conversation changes
+  useEffect(() => {
+    setCursor(null);
+    setHasMore(false);
+    setIsLoadingMore(false);
+    loadingMoreRef.current = false;
+  }, [conversationId]);
 
   const query = useQuery<Message[]>({
     queryKey: ['messages', conversationId],
     queryFn: async () => {
       if (!conversationId) return [];
-      const res = await apiClient.get(
-        `/conversations/${conversationId}/messages`,
-      );
-      const list = res.data.reverse(); // API returns desc, we want asc
-      // Deduplicate by id (e.g. when multiple clients load the same conversation)
-      const seen = new Set<string>();
-      return list.filter((m: Message) => {
-        if (seen.has(m.id)) return false;
-        seen.add(m.id);
-        return true;
-      });
+      const res = await apiClient.get(`/conversations/${conversationId}/messages`);
+      const { items, nextCursor, hasMore: more } = res.data;
+      setCursor(nextCursor);
+      setHasMore(more);
+      return dedup([...items].reverse());
     },
     enabled: !!conversationId,
   });
 
   useEffect(() => {
     if (query.data && conversationId) {
-      // Bug 3: merge server messages with any messages already in the store
-      // (socket messages that arrived while the query was loading)
       const existing = useChatStore.getState().messages[conversationId] || [];
-      const serverIds = new Set(query.data.map((m) => m.id));
-      const extras = existing.filter((m) => !serverIds.has(m.id));
-      const merged = [...query.data, ...extras].sort(
-        (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
-      );
-      setMessages(conversationId, merged);
+      setMessages(conversationId, mergeSorted(query.data, existing));
     }
   }, [query.data, conversationId, setMessages]);
 
-  return query;
+  const loadOlderMessages = async () => {
+    if (!conversationId || !cursor || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setIsLoadingMore(true);
+    try {
+      const res = await apiClient.get(
+        `/conversations/${conversationId}/messages?cursor=${cursor}`,
+      );
+      const { items, nextCursor, hasMore: more } = res.data;
+      setCursor(nextCursor);
+      setHasMore(more);
+      const older = dedup([...items].reverse());
+      const existing = useChatStore.getState().messages[conversationId] || [];
+      // Prepend older messages, keeping newest socket messages at end
+      const existingIds = new Set(existing.map((m) => m.id));
+      const newOnes = older.filter((m) => !existingIds.has(m.id));
+      setMessages(conversationId, [...newOnes, ...existing].sort(
+        (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime(),
+      ));
+    } finally {
+      setIsLoadingMore(false);
+      loadingMoreRef.current = false;
+    }
+  };
+
+  return { ...query, hasMore, isLoadingMore, loadOlderMessages };
 }
 
 export function useSendMessage() {

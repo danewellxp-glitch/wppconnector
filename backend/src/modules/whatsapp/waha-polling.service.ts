@@ -233,7 +233,9 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
           // Converte URL interna do WAHA para o proxy do backend ou salva localmente
           if (rawUrl) {
             try {
-              const response = await axios.get(rawUrl, { responseType: 'arraybuffer', headers: this.wahaHeaders() });
+              // WAHA envia URLs internas com localhost:3000 — substitui pela URL real do WAHA
+              const downloadUrl = rawUrl.replace(/https?:\/\/localhost:\d+/, this.wahaApiUrl);
+              const response = await axios.get(downloadUrl, { responseType: 'arraybuffer', headers: this.wahaHeaders() });
               const buffer = Buffer.from(response.data);
               let ext = mimetype.split('/')[1]?.split(';')[0];
               if (!ext || ext === 'ogg; codecs=opus') ext = 'ogg';
@@ -316,7 +318,6 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
               assignedAt: null,
               departmentId: null,
               routedAt: null,
-              timeoutAt: null,
             },
           });
         }
@@ -346,34 +347,7 @@ export class WahaPollingService implements OnModuleInit, OnModuleDestroy {
             });
             if (claimed.count > 0) {
               try {
-                // Espelha o webhook: verifica roteamento anterior e horário comercial
-                const hasSuggestion =
-                  await this.conversationRoutingService.checkAndSuggestPreviousRouting(
-                    conversation.id,
-                    customerPhone,
-                    company.id,
-                  );
-                if (!hasSuggestion) {
-                  if (!this.flowEngineService.isBusinessHours(company)) {
-                    this.logger.log(
-                      `[${session}] Fora do horário comercial para ${customerPhone}. Enviando mensagem offline...`,
-                    );
-                    await this.flowEngineService.sendOutOfHoursMessage(conversation);
-                    const adminDept = await this.flowEngineService.resolveDepartmentSlug(
-                      company.id,
-                      'administrativo',
-                    );
-                    if (adminDept) {
-                      await this.departmentRoutingService.routeToDepartment(
-                        conversation.id,
-                        adminDept.slug,
-                        company.id,
-                      );
-                    }
-                  } else {
-                    await this.flowEngineService.sendGreeting(conversation);
-                  }
-                }
+                await this.flowEngineService.sendGreeting(conversation);
               } catch (err: any) {
                 this.logger.warn(`[${session}] Falha ao enviar saudação para ${customerPhone}: ${err.message}`);
               }

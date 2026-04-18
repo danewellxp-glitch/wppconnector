@@ -20,7 +20,6 @@ export async function seedDepartments(prisma: PrismaClient, companyId: string) {
         slug: dept.slug,
         isRoot: dept.isRoot,
         color: dept.color,
-        responseTimeoutMinutes: 3,
         maxAgents: 10,
       },
     });

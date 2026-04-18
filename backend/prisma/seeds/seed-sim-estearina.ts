@@ -54,7 +54,6 @@ async function main() {
             slug: dept.slug,
             description: `Departamento de ${dept.name}`,
             isActive: true,
-            responseTimeoutMinutes: 30,
             maxAgents: 10,
           },
         });

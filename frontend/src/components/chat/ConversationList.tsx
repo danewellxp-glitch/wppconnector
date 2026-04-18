@@ -35,6 +35,9 @@ export function ConversationList() {
   const typingUsers = useChatStore((s) => s.typingUsers);
 
   const filtered = conversations.filter((c) => {
+    // Never show contacts synced from phone that never sent a message
+    if (!c.lastMessageAt) return false;
+
     const term = search.toLowerCase();
     const matchesSearch =
       cleanPhone(c.customerPhone).includes(term) ||
@@ -44,12 +47,10 @@ export function ConversationList() {
     if (statusFilter === 'OFFLINE_QUEUE') {
       matchesStatus = c.status === 'OPEN' && !c.assignedUser && !c.assignedUserId;
     } else if (statusFilter === 'OPEN') {
-      // Para "Abertas", mostrar apenas as que não são da fila offline para não poluir
       matchesStatus = c.status === 'OPEN' && (!c.departmentId || c.flowState !== 'DEPARTMENT_SELECTED');
     } else if (statusFilter) {
       matchesStatus = c.status === statusFilter;
     } else {
-      // Se não tem filtro (Todas), não vamos esconder as resolvidas
       matchesStatus = true;
     }
 
@@ -57,7 +58,7 @@ export function ConversationList() {
   });
 
   return (
-    <div className="flex h-full w-80 flex-col border-r bg-white">
+    <div className="flex h-full w-[480px] flex-col border-r bg-white">
       {/* Header */}
       <div className="border-b p-4">
         <div className="flex items-center justify-between mb-3">
@@ -130,9 +131,9 @@ export function ConversationList() {
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-sm font-medium truncate">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium truncate min-w-0">
                       {conv.customerName || cleanPhone(conv.customerPhone)}
                     </span>
                     <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
@@ -170,7 +171,9 @@ export function ConversationList() {
                       }
                       return (
                         <p className="text-xs text-muted-foreground truncate">
-                          {lastMessage?.content || 'Sem mensagens'}
+                          {lastMessage
+                            ? (lastMessage.content || (lastMessage.type === 'IMAGE' ? '📷 Imagem' : lastMessage.type === 'AUDIO' ? '🎵 Áudio' : lastMessage.type === 'VIDEO' ? '🎥 Vídeo' : lastMessage.type === 'DOCUMENT' ? '📄 Documento' : '—'))
+                            : '—'}
                         </p>
                       );
                     })()}

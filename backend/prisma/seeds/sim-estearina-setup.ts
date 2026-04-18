@@ -107,7 +107,6 @@ async function main() {
             name: dept.name,
             isRoot: dept.isRoot,
             color: dept.color,
-            responseTimeoutMinutes: 3,
             maxAgents: 2,
           },
         });

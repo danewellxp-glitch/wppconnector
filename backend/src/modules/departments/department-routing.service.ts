@@ -4,8 +4,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { WebsocketGateway } from '../websocket/websocket.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
-import { FlowState } from '@prisma/client';
-
 @Injectable()
 export class DepartmentRoutingService {
   private readonly logger = new Logger(DepartmentRoutingService.name);
@@ -52,17 +50,12 @@ export class DepartmentRoutingService {
       where: { id: conversationId },
     });
 
-    const timeoutAt = new Date(
-      Date.now() + dept.responseTimeoutMinutes * 60 * 1000,
-    );
-
-    // SEMPRE definir o departamento e o timeout ANTES de tentar atribuir
+    // SEMPRE definir o departamento ANTES de tentar atribuir
     await this.prisma.conversation.update({
       where: { id: conversationId },
       data: {
         departmentId: dept.id,
         routedAt: new Date(),
-        timeoutAt,
         flowState: 'DEPARTMENT_SELECTED', // correto: ainda não tem agente
       },
     });
@@ -119,7 +112,6 @@ export class DepartmentRoutingService {
       data: {
         flowState: 'DEPARTMENT_SELECTED',
         assignedUserId: null,
-        timeoutAt: null,
         status: 'OPEN',
       },
     });
@@ -189,7 +181,6 @@ export class DepartmentRoutingService {
             assignedAt: new Date(),
             flowState: 'ASSIGNED',
             status: 'ASSIGNED',
-            timeoutAt: null,
           },
         });
 
@@ -259,160 +250,10 @@ export class DepartmentRoutingService {
         data: {
           flowState: 'DEPARTMENT_SELECTED',
           status: 'OPEN',
-          timeoutAt: null,
         },
       });
       if (conv.departmentId) {
         await this.assignToAgent(conv.id, conv.departmentId);
-      }
-    }
-
-    const timedOut = await this.prisma.conversation.findMany({
-      where: {
-        flowState: 'DEPARTMENT_SELECTED',
-        timeoutAt: { lt: new Date() },
-      },
-      include: { company: true, department: true },
-    });
-
-    if (timedOut.length === 0) return;
-
-    this.logger.log(
-      `[TIMEOUT] ${timedOut.length} conversa(s) com timeout. Mantendo no departamento original...`,
-    );
-
-    for (const conv of timedOut) {
-      // Keep the conversation in its own department — no redirect to root.
-      // Clear the timeout so the polling loop doesn't fire again.
-      await this.prisma.conversation.update({
-        where: { id: conv.id },
-        data: {
-          flowState: 'DEPARTMENT_SELECTED',
-          assignedUserId: null,
-          timeoutAt: null,
-          status: 'OPEN',
-        },
-      });
-
-      const gateway = this.getWebsocketGateway();
-      if (gateway) {
-        gateway.emitToCompany(conv.companyId, 'conversation-queued', {
-          conversationId: conv.id,
-          departmentId: conv.departmentId,
-          reason: 'timeout',
-        });
-      }
-
-      this.logger.log(
-        `[TIMEOUT] Conversa ${conv.id} mantida em ${conv.department?.name || conv.departmentId}`,
-      );
-    }
-  }
-
-  private async redirectToAdmin(
-    conversationId: string,
-    companyId: string,
-    reason: 'timeout' | 'offline' | 'all_offline',
-  ): Promise<void> {
-    // Buscar dados da conversa para notificação
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
-      include: { department: true },
-    });
-
-    const adminDept = await this.prisma.department.findFirst({
-      where: { companyId, isRoot: true, isActive: true },
-    });
-
-    if (!adminDept) {
-      this.logger.error(
-        `[ROUTING] Departamento raiz não encontrado para empresa ${companyId}`,
-      );
-      return;
-    }
-
-    const messages = {
-      timeout:
-        'Tempo de espera esgotado. Redirecionando para o Administrativo...',
-      offline:
-        'Nenhum atendente encontrado neste setor. Redirecionando para o Administrativo...',
-      all_offline:
-        'Todos os atendentes estão indisponíveis no momento. ' +
-        'Sua mensagem foi registrada e entraremos em contato em breve. 🙏',
-    };
-
-    // Mover para fila do Admin
-    await this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: {
-        departmentId: adminDept.id,
-        timeoutAt: new Date(Date.now() + 10 * 60 * 1000), // 10min para Admin
-        // NÃO setar flowState aqui — assignToAgent vai setar ASSIGNED se tiver agente
-      },
-    });
-
-    // 🔔 Notificar o setor Admin sobre transferência
-    if (conversation) {
-      this.notificationsService.notifyConversationTransferred({
-        conversationId,
-        customerName: conversation.customerName || 'Cliente',
-        customerPhone: conversation.customerPhone,
-        transferredBy: 'Sistema (Bot)',
-        fromDepartmentId: conversation.departmentId || '',
-        fromDepartmentName: conversation.department?.name || 'Desconhecido',
-        toDepartmentId: adminDept.id,
-        toDepartmentName: adminDept.name,
-        timestamp: new Date(),
-      });
-    }
-
-    const gateway = this.getWebsocketGateway();
-    if (gateway) {
-      gateway.emitToCompany(companyId, 'conversation-transferred', {
-        conversationId,
-        toDepartmentId: adminDept.id,
-        reason,
-      });
-    }
-
-    const adminAgent = await this.assignToAgent(conversationId, adminDept.id);
-
-    if (adminAgent) {
-      if (gateway) {
-        const convUpdated = await this.prisma.conversation.findUnique({
-          where: { id: conversationId },
-          include: { department: true },
-        });
-        gateway.emitToUser(adminAgent.id, 'conversation-assigned', {
-          conversationId,
-          conversation: convUpdated,
-          agentName: adminAgent.name,
-        });
-      }
-      await this.sendWhatsAppToConversation(conversationId, messages[reason]);
-    } else {
-      // todos offline — manter a conversa na fila do Administrativo para que
-      // os atendentes vejam a conversa pendente quando voltarem a ficar online.
-      // E remover o timeoutAt para que ela não fique roteada em loop.
-      await this.prisma.conversation.update({
-        where: { id: conversationId },
-        data: {
-          flowState: 'DEPARTMENT_SELECTED',
-          departmentId: adminDept.id,
-          assignedUserId: null,
-          timeoutAt: null,
-          status: 'OPEN',
-        },
-      });
-      await this.sendWhatsAppToConversation(
-        conversationId,
-        messages['all_offline'],
-      );
-      if (gateway) {
-        gateway.emitToDepartment(adminDept.id, 'conversation-queued', {
-          conversationId,
-          reason,
-        });
       }
     }
   }

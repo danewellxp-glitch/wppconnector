@@ -180,27 +180,15 @@ export class ConversationsService {
       const customerPhone = wContact.number;
       const customerName = wContact.name || wContact.pushname || customerPhone;
 
-      // We only insert or update the name. We do NOT change status if it already exists.
-      // We set new contacts as ARCHIVED so they don't pop up as OPEN for everyone.
-      await this.prisma.conversation.upsert({
-        where: { companyId_customerPhone_wahaSession: { companyId, customerPhone, wahaSession: 'default' } },
-        update: {
-          // update name if they have a better one now
-          customerName: customerName,
-        },
-        create: {
-          companyId,
-          customerPhone,
-          wahaSession: 'default',
-          customerName,
-          status: 'ARCHIVED',
-          flowState: 'RESOLVED',
-          departmentId: agent?.departmentId || null,
-          unreadCount: 0,
-        }
+      // Only update the name on conversations that already exist (have real messages).
+      // Never create a new conversation just because a contact exists in the phone —
+      // that would flood the list with "Sem mensagens" entries.
+      const result = await this.prisma.conversation.updateMany({
+        where: { companyId, customerPhone, wahaSession: 'default' },
+        data: { customerName },
       });
 
-      syncedCount++;
+      if (result.count > 0) syncedCount++;
     }
 
     return { message: 'Contatos sincronizados com sucesso', count: syncedCount };
@@ -242,7 +230,6 @@ export class ConversationsService {
           assignedAt: new Date(),
           departmentId: agent?.departmentId || null,
           routedAt: new Date(),
-          timeoutAt: null,
           unreadCount: 0,
         },
         include: { company: true }
@@ -350,7 +337,6 @@ export class ConversationsService {
         assignedAt: new Date(),
         departmentId: agent?.departmentId || conv.departmentId,
         routedAt: new Date(),
-        timeoutAt: null,
         unreadCount: 0,
       }
     });
@@ -406,7 +392,7 @@ export class ConversationsService {
     const messages = await this.prisma.message.findMany({
       where: { conversationId },
       orderBy: { sentAt: 'desc' },
-      take,
+      take: take + 1, // fetch one extra to detect if there are older messages
       ...(cursor && {
         skip: 1,
         cursor: { id: cursor },
@@ -418,11 +404,18 @@ export class ConversationsService {
       },
     });
 
-    // Normaliza mediaUrl para mensagens antigas que guardam URL interna do WAHA
-    return messages.map((msg) => ({
-      ...msg,
-      mediaUrl: this.normalizeMediaUrl(msg.mediaUrl),
-    }));
+    const hasMore = messages.length > take;
+    const items = hasMore ? messages.slice(0, take) : messages;
+    const nextCursor = hasMore ? items[items.length - 1].id : null;
+
+    return {
+      items: items.map((msg) => ({
+        ...msg,
+        mediaUrl: this.normalizeMediaUrl(msg.mediaUrl),
+      })),
+      nextCursor,
+      hasMore,
+    };
   }
 
   async assign(conversationId: string, userId: string) {
@@ -458,7 +451,6 @@ export class ConversationsService {
         assignedUserId: userId,
         assignedAt: new Date(),
         flowState: 'ASSIGNED',
-        timeoutAt: null,
       },
       include: {
         assignedUser: { select: { id: true, name: true, email: true } },
@@ -516,7 +508,6 @@ export class ConversationsService {
       status: 'OPEN',
       flowState: 'DEPARTMENT_SELECTED',
       routedAt: new Date(),
-      timeoutAt: new Date(Date.now() + dept.responseTimeoutMinutes * 60 * 1000),
     };
 
     if (userId) {
@@ -528,7 +519,6 @@ export class ConversationsService {
         updateData.assignedUserId = userId;
         updateData.assignedAt = new Date();
         updateData.flowState = 'ASSIGNED';
-        updateData.timeoutAt = null;
 
         await this.prisma.assignment.create({
           data: { conversationId, userId },
@@ -623,6 +613,20 @@ export class ConversationsService {
       data: { unassignedAt: new Date() },
     });
 
+    // Record or clear attendance history before resetting state
+    // - Agent + dept present: record as a real attended session
+    // - No dept (GREETING cleanup): clear history so next visit starts fresh
+    const attendanceData: Record<string, any> = {};
+    if (conv.assignedUserId && conv.departmentId) {
+      attendanceData.lastDepartmentId = conv.departmentId;
+      attendanceData.lastAttendantId = conv.assignedUserId;
+      attendanceData.lastAttendedAt = new Date();
+    } else if (!conv.departmentId) {
+      attendanceData.lastDepartmentId = null;
+      attendanceData.lastAttendantId = null;
+      attendanceData.lastAttendedAt = null;
+    }
+
     // Reset conversation state completely so bot restarts on next contact
     return this.prisma.conversation.update({
       where: { id: conversationId },
@@ -634,8 +638,8 @@ export class ConversationsService {
         assignedAt: null,
         departmentId: null,
         routedAt: null,
-        timeoutAt: null,
         unreadCount: 0,
+        ...attendanceData,
       },
     });
   }
